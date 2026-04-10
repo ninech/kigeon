@@ -10,6 +10,12 @@ linters:
     - staticcheck
     - unused
     - revive
+  exclusions:
+    rules:
+      # Unchecked errors are acceptable in tests.
+      - path: _test\.go
+        linters:
+          - errcheck
 
 formatters:
   enable:
@@ -18,11 +24,3 @@ formatters:
     goimports:
       local-prefixes:
         - github.com/ninech/kigeon
-
-issues:
-  exclusions:
-    rules:
-      # Unchecked errors are acceptable in tests.
-      - path: _test\.go
-        linters:
-          - errcheck
