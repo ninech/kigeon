@@ -20,8 +20,9 @@ formatters:
         - github.com/ninech/kigeon
 
 issues:
-  exclude-rules:
-    # Unchecked errors are acceptable in tests.
-    - path: _test\.go
-      linters:
-        - errcheck
+  exclusions:
+    rules:
+      # Unchecked errors are acceptable in tests.
+      - path: _test\.go
+        linters:
+          - errcheck
