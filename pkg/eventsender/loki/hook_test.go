@@ -3,6 +3,7 @@ package loki
 import (
 	"context"
 	"log/slog"
+	"math/big"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.starlark.net/starlark"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
@@ -301,5 +303,118 @@ def transform(config, event):
 
 		_, err = h.execute(context.Background(), baseConfig, podEvent)
 		require.NoError(t, err)
+	})
+}
+
+func TestGoValueToStarlark(t *testing.T) {
+	t.Run("nil becomes starlark.None", func(t *testing.T) {
+		val, err := goValueToStarlark(nil)
+		require.NoError(t, err)
+		assert.Equal(t, starlark.None, val)
+	})
+
+	t.Run("bool true", func(t *testing.T) {
+		val, err := goValueToStarlark(true)
+		require.NoError(t, err)
+		assert.Equal(t, starlark.Bool(true), val)
+	})
+
+	t.Run("bool false", func(t *testing.T) {
+		val, err := goValueToStarlark(false)
+		require.NoError(t, err)
+		assert.Equal(t, starlark.Bool(false), val)
+	})
+
+	t.Run("list with nested values", func(t *testing.T) {
+		input := []any{"hello", true, nil}
+		val, err := goValueToStarlark(input)
+		require.NoError(t, err)
+		list, ok := val.(*starlark.List)
+		require.True(t, ok, "expected *starlark.List")
+		require.Equal(t, 3, list.Len())
+		assert.Equal(t, starlark.String("hello"), list.Index(0))
+		assert.Equal(t, starlark.Bool(true), list.Index(1))
+		assert.Equal(t, starlark.None, list.Index(2))
+	})
+
+	t.Run("nested list (list inside a list)", func(t *testing.T) {
+		input := []any{[]any{"a", "b"}, "c"}
+		val, err := goValueToStarlark(input)
+		require.NoError(t, err)
+		outer, ok := val.(*starlark.List)
+		require.True(t, ok)
+		require.Equal(t, 2, outer.Len())
+		inner, ok := outer.Index(0).(*starlark.List)
+		require.True(t, ok, "first element should be a *starlark.List")
+		assert.Equal(t, 2, inner.Len())
+		assert.Equal(t, starlark.String("a"), inner.Index(0))
+		assert.Equal(t, starlark.String("b"), inner.Index(1))
+		assert.Equal(t, starlark.String("c"), outer.Index(1))
+	})
+
+	t.Run("unsupported type returns error", func(t *testing.T) {
+		type myStruct struct{ X int }
+		_, err := goValueToStarlark(myStruct{X: 1})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unsupported type")
+	})
+}
+
+func TestStarlarkValueToGo(t *testing.T) {
+	t.Run("starlark.None becomes nil", func(t *testing.T) {
+		got, err := starlarkValueToGo(starlark.None)
+		require.NoError(t, err)
+		assert.Nil(t, got)
+	})
+
+	t.Run("starlark.Bool true", func(t *testing.T) {
+		got, err := starlarkValueToGo(starlark.Bool(true))
+		require.NoError(t, err)
+		assert.Equal(t, true, got)
+	})
+
+	t.Run("starlark.Int returns int64", func(t *testing.T) {
+		sv := starlark.MakeInt(42)
+		got, err := starlarkValueToGo(sv)
+		require.NoError(t, err)
+		assert.Equal(t, int64(42), got)
+	})
+
+	t.Run("starlark.Int overflow returns error", func(t *testing.T) {
+		// Construct an integer value that overflows int64.
+		huge := new(big.Int).SetUint64(^uint64(0)) // 2^64 - 1
+		sv := starlark.MakeBigInt(huge)
+		_, err := starlarkValueToGo(sv)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "overflows int64")
+	})
+
+	t.Run("starlark.Tuple is unsupported", func(t *testing.T) {
+		tuple := starlark.Tuple{starlark.String("a"), starlark.String("b")}
+		_, err := starlarkValueToGo(tuple)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unsupported starlark type")
+	})
+
+	t.Run("starlark.Set is unsupported", func(t *testing.T) {
+		set := starlark.NewSet(2)
+		require.NoError(t, set.Insert(starlark.String("x")))
+		_, err := starlarkValueToGo(set)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unsupported starlark type")
+	})
+
+	t.Run("nested list inside list", func(t *testing.T) {
+		inner := starlark.NewList([]starlark.Value{starlark.String("a")})
+		outer := starlark.NewList([]starlark.Value{inner, starlark.String("b")})
+		got, err := starlarkValueToGo(outer)
+		require.NoError(t, err)
+		slice, ok := got.([]any)
+		require.True(t, ok)
+		require.Len(t, slice, 2)
+		innerSlice, ok := slice[0].([]any)
+		require.True(t, ok)
+		assert.Equal(t, []any{"a"}, innerSlice)
+		assert.Equal(t, "b", slice[1])
 	})
 }

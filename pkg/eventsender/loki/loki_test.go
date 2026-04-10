@@ -3,6 +3,7 @@ package loki
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -322,6 +323,117 @@ func TestSender_buildPushPayload(t *testing.T) {
 	assert.NotEmpty(t, stream.Values[0][0])
 	// Second element is the JSON message
 	assert.Contains(t, stream.Values[0][1], "test-event")
+}
+
+// mockAck implements eventqueue.EventAcknowledger for testing.
+type mockAck struct {
+	called bool
+	err    error
+}
+
+func (m *mockAck) Ack() error {
+	m.called = true
+	return m.err
+}
+
+func TestSender_handleHookError(t *testing.T) {
+	hookErr := fmt.Errorf("hook exploded")
+
+	newServerAndSender := func(t *testing.T, cfg Config) (*httptest.Server, *Sender, *[]string) {
+		t.Helper()
+		var paths []string
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			paths = append(paths, r.URL.Path)
+			w.WriteHeader(http.StatusNoContent)
+		}))
+		t.Cleanup(server.Close)
+		cfg.URL = server.URL
+		sender := &Sender{
+			name:       "test",
+			config:     cfg,
+			httpClient: server.Client(),
+			logger:     testLogger(),
+		}
+		return server, sender, &paths
+	}
+
+	t.Run("use-default sends with base config and acks", func(t *testing.T) {
+		hookCfg := &ConfigHook{OnError: "use-default"}
+		cfg := Config{URL: "placeholder", Hook: hookCfg}
+		_, sender, paths := newServerAndSender(t, cfg)
+
+		ack := &mockAck{}
+		event := createTestEvent()
+
+		err := sender.handleHookError(context.Background(), hookErr, event, ack)
+
+		require.NoError(t, err)
+		assert.True(t, ack.called, "Ack should have been called")
+		require.Len(t, *paths, 1)
+		assert.Equal(t, pushPath, (*paths)[0])
+	})
+
+	t.Run("skip acks without sending", func(t *testing.T) {
+		hookCfg := &ConfigHook{OnError: "skip"}
+		cfg := Config{URL: "placeholder", Hook: hookCfg}
+		_, sender, paths := newServerAndSender(t, cfg)
+
+		ack := &mockAck{}
+		event := createTestEvent()
+
+		err := sender.handleHookError(context.Background(), hookErr, event, ack)
+
+		require.NoError(t, err)
+		assert.True(t, ack.called, "Ack should have been called")
+		assert.Empty(t, *paths, "no HTTP request should have been made")
+	})
+
+	t.Run("fail returns error without acking", func(t *testing.T) {
+		hookCfg := &ConfigHook{OnError: "fail"}
+		cfg := Config{URL: "placeholder", Hook: hookCfg}
+		_, sender, paths := newServerAndSender(t, cfg)
+
+		ack := &mockAck{}
+		event := createTestEvent()
+
+		err := sender.handleHookError(context.Background(), hookErr, event, ack)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "hook exploded")
+		assert.False(t, ack.called, "Ack should NOT have been called")
+		assert.Empty(t, *paths, "no HTTP request should have been made")
+	})
+
+	t.Run("nil Hook behaves like use-default", func(t *testing.T) {
+		cfg := Config{URL: "placeholder", Hook: nil}
+		_, sender, paths := newServerAndSender(t, cfg)
+
+		ack := &mockAck{}
+		event := createTestEvent()
+
+		err := sender.handleHookError(context.Background(), hookErr, event, ack)
+
+		require.NoError(t, err)
+		assert.True(t, ack.called, "Ack should have been called")
+		require.Len(t, *paths, 1)
+		assert.Equal(t, pushPath, (*paths)[0])
+	})
+
+	t.Run("skip with ack failure propagates error", func(t *testing.T) {
+		ackErr := fmt.Errorf("nats is down")
+		hookCfg := &ConfigHook{OnError: "skip"}
+		cfg := Config{URL: "placeholder", Hook: hookCfg}
+		_, sender, _ := newServerAndSender(t, cfg)
+
+		ack := &mockAck{err: ackErr}
+		event := createTestEvent()
+
+		err := sender.handleHookError(context.Background(), hookErr, event, ack)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "nats is down")
+		assert.True(t, ack.called, "Ack should have been called")
+	})
 }
 
 func createTestEvent() *corev1.Event {
