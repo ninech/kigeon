@@ -1,3 +1,5 @@
+// Package eventpusher watches the Kubernetes API for events and publishes
+// them to the event queue.
 package eventpusher
 
 import (

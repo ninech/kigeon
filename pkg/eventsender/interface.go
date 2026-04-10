@@ -1,3 +1,5 @@
+// Package eventsender defines the EventSender interface and the sender registry
+// used to create and manage event sender plugins.
 package eventsender
 
 import "context"

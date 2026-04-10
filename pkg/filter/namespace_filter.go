@@ -1,3 +1,5 @@
+// Package filter provides namespace filtering for Kubernetes events based on
+// label selectors.
 package filter
 
 import (
@@ -19,6 +21,8 @@ const (
 	defaultHardRefreshInterval = 4 * time.Hour
 )
 
+// DynamicNamespaceFilter watches namespaces on the cluster and allows
+// filtering events by namespace label selectors.
 type DynamicNamespaceFilter struct {
 	client kubernetes.Interface
 	config DynamicNamespaceFilterConfig
@@ -36,6 +40,7 @@ type DynamicNamespaceFilter struct {
 	logger   *slog.Logger
 }
 
+// DynamicNamespaceFilterConfig configures a DynamicNamespaceFilter.
 type DynamicNamespaceFilterConfig struct {
 	// Filter events based on the involved objects namespace labels.
 	LabelSelector labels.Selector
@@ -51,6 +56,7 @@ type DynamicNamespaceFilterConfig struct {
 	Logger *slog.Logger
 }
 
+// StaticNamespaceFilterConfig configures a filter based on a fixed list of namespaces.
 type StaticNamespaceFilterConfig struct {
 	// Filter events based on a static list of namespaces.
 	Namespaces []string

@@ -1,3 +1,4 @@
+// Package config provides configuration loading and validation for kigeon.
 package config
 
 import (

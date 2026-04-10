@@ -1,3 +1,5 @@
+// Package loki implements an event sender that forwards Kubernetes events to
+// a Grafana Loki instance.
 package loki
 
 import (

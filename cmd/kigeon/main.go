@@ -1,3 +1,4 @@
+// Package main is the entry point for the kigeon Kubernetes event exporter.
 package main
 
 import (

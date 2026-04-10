@@ -5,13 +5,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ninech/kigeon/pkg/filter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes/fake"
+
+	"github.com/ninech/kigeon/pkg/filter"
 )
 
 // eventually polls a condition function until it returns true or the timeout expires.

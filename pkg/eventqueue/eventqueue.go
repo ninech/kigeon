@@ -1,3 +1,5 @@
+// Package eventqueue provides a persistent NATS JetStream-backed queue for
+// buffering and deduplicating Kubernetes events between the pusher and senders.
 package eventqueue
 
 import (
@@ -157,6 +159,8 @@ type EventFetcher struct {
 	consumer jetstream.Consumer
 }
 
+// EventAcknowledger is implemented by queue messages and must be called after
+// an event has been successfully processed to remove it from the queue.
 type EventAcknowledger interface {
 	Ack() error
 }

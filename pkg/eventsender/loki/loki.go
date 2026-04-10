@@ -12,9 +12,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/ninech/kigeon/pkg/eventqueue"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/ninech/kigeon/pkg/eventqueue"
 )
 
 const (
@@ -210,7 +211,11 @@ func (s *Sender) sendToLoki(ctx context.Context, event *corev1.Event, cfg Config
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			s.logger.Warn("failed to close response body", slog.Any("error", err))
+		}
+	}()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		respBody, _ := io.ReadAll(resp.Body)

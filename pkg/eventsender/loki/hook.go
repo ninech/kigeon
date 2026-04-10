@@ -17,7 +17,7 @@ import (
 
 const (
 	defaultHookTimeout = 100 * time.Millisecond
-	podCacheTTL   = 30 * time.Second
+	podCacheTTL        = 30 * time.Second
 )
 
 // hookExecutor runs a Starlark script to potentially modify the Loki config

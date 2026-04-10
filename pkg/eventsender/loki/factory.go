@@ -4,10 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/ninech/kigeon/pkg/eventsender"
 	"github.com/ninech/kigeon/pkg/eventqueue"
+	"github.com/ninech/kigeon/pkg/eventsender"
 )
 
+// TypeName is the registered sender type name for the Loki sender.
 const TypeName = "loki"
 
 func init() {
