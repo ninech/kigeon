@@ -50,7 +50,7 @@ type EventQueue struct {
 	logger *slog.Logger
 }
 
-// Options allow to pass
+// Options configures the EventQueue.
 type Options struct {
 	Logger *slog.Logger
 	Debug  bool

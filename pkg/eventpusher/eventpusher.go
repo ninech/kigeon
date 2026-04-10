@@ -184,12 +184,11 @@ func (ep *EventPusher) publishingLoop() {
 				return
 			}
 
-			// Use a background context for publishing attempts if the main context is canceled
-			publishCtx, publishCancel := context.WithTimeout(context.Background(), ep.pushTimeout)
-			defer publishCancel()
+			publishCtx, publishCancel := context.WithTimeout(ep.ctx, ep.pushTimeout)
 			if err := ep.eq.PublishEvent(publishCtx, event); err != nil {
 				ep.logger.Error("error on event publishing", slog.Any("error", err.Error()))
 			}
+			publishCancel()
 		case <-ep.ctx.Done():
 			// although the channel is our primary signal to stop, the loop continues processing remaining
 			// items in the channel until the channel is closed by ep.Run().

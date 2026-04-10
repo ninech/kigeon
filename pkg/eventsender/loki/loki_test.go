@@ -155,10 +155,16 @@ func TestSender_sendToLoki(t *testing.T) {
 
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				capturedReq = r
-				capturedBody, _ = io.ReadAll(r.Body)
+				var err error
+				capturedBody, err = io.ReadAll(r.Body)
+				if err != nil {
+					t.Errorf("failed to read request body: %v", err)
+				}
 				if tt.serverBody != "" {
 					w.WriteHeader(tt.serverResponse)
-					w.Write([]byte(tt.serverBody))
+					if _, err := w.Write([]byte(tt.serverBody)); err != nil {
+						t.Errorf("failed to write response body: %v", err)
+					}
 					return
 				}
 				w.WriteHeader(tt.serverResponse)

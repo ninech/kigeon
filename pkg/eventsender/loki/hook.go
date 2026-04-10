@@ -17,7 +17,7 @@ import (
 
 const (
 	defaultHookTimeout = 100 * time.Millisecond
-	podLabelCacheTTL   = 30 * time.Second
+	podCacheTTL   = 30 * time.Second
 )
 
 // hookExecutor runs a Starlark script to potentially modify the Loki config
@@ -62,7 +62,7 @@ func (c *podCache) set(namespace, name string, pod *corev1.Pod) {
 	defer c.mu.Unlock()
 	c.entries[namespace+"/"+name] = podCacheEntry{
 		pod:       pod,
-		expiresAt: time.Now().Add(podLabelCacheTTL),
+		expiresAt: time.Now().Add(podCacheTTL),
 	}
 }
 
