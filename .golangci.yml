@@ -1,0 +1,19 @@
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - goimports
+    - revive
+
+linters-settings:
+  goimports:
+    local-prefixes: github.com/ninech/kigeon
+
+issues:
+  exclude-rules:
+    # Unchecked errors are acceptable in tests.
+    - path: _test\.go
+      linters:
+        - errcheck
