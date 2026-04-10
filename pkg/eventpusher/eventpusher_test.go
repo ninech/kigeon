@@ -11,14 +11,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/utils/ptr"
 
-	"k8s.io/client-go/kubernetes/fake"
-
 	"github.com/ninech/kigeon/pkg/eventpusher"
-	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -35,7 +34,7 @@ type fakeEventQueue struct {
 }
 
 // PublishEvent tracks the event and signals the waiting test routine.
-func (f *fakeEventQueue) PublishEvent(ctx context.Context, event *corev1.Event) error {
+func (f *fakeEventQueue) PublishEvent(_ context.Context, event *corev1.Event) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -196,7 +195,7 @@ func TestEventPusher(t *testing.T) {
 				is.NoError(testCase.preHook(t.Context(), fakeClient))
 			}
 			mockQueue.publishWait.Add(testCase.expectedEvents)
-			pusher := eventpusher.NewEventPusher(t.Context(), mockQueue, fakeClient, eventpusher.EventPusherOptions{
+			pusher := eventpusher.NewEventPusher(t.Context(), mockQueue, fakeClient, eventpusher.Options{
 				Logger: logger,
 				// we don't use a resync period as we want to count the events we
 				// pushed. So relying on 'watch' should be fine.

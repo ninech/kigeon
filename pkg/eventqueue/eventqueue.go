@@ -50,8 +50,8 @@ type EventQueue struct {
 	logger *slog.Logger
 }
 
-// EventQueueOptions allow to pass
-type EventQueueOptions struct {
+// Options allow to pass
+type Options struct {
 	Logger *slog.Logger
 	Debug  bool
 	// EventsMaxAge specifies how long we store (and retry sending for)
@@ -67,7 +67,7 @@ type EventQueueOptions struct {
 }
 
 // StartEventQueue initializes and starts a new event queue.
-func StartEventQueue(ctx context.Context, dataDir string, options EventQueueOptions) (*EventQueue, error) {
+func StartEventQueue(ctx context.Context, dataDir string, options Options) (*EventQueue, error) {
 	// ensure the data directory exists
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create event queue data directory: %w", err)

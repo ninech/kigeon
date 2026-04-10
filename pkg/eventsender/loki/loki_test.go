@@ -102,7 +102,7 @@ func TestSender_sendToLoki(t *testing.T) {
 				TenantID: "test-tenant",
 			},
 			serverResponse: http.StatusNoContent,
-			validateReq: func(t *testing.T, req *http.Request, body []byte) {
+			validateReq: func(t *testing.T, req *http.Request, _ []byte) {
 				assert.Equal(t, "test-tenant", req.Header.Get("X-Scope-OrgID"))
 			},
 		},
@@ -115,7 +115,7 @@ func TestSender_sendToLoki(t *testing.T) {
 				},
 			},
 			serverResponse: http.StatusNoContent,
-			validateReq: func(t *testing.T, req *http.Request, body []byte) {
+			validateReq: func(t *testing.T, req *http.Request, _ []byte) {
 				user, pass, ok := req.BasicAuth()
 				assert.True(t, ok)
 				assert.Equal(t, "user", user)
@@ -131,7 +131,7 @@ func TestSender_sendToLoki(t *testing.T) {
 				},
 			},
 			serverResponse: http.StatusNoContent,
-			validateReq: func(t *testing.T, req *http.Request, body []byte) {
+			validateReq: func(t *testing.T, _ *http.Request, body []byte) {
 				var payload lokiPushPayload
 				err := json.Unmarshal(body, &payload)
 				require.NoError(t, err)

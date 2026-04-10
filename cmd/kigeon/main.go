@@ -88,7 +88,7 @@ func run() error {
 
 	// Start EventQueue
 	kubernetesEventsMaxLifetime := cfg.Queue.KubernetesEventsMaxLifetime.Duration
-	eq, err := eventqueue.StartEventQueue(ctx, cfg.Global.DataDir, eventqueue.EventQueueOptions{
+	eq, err := eventqueue.StartEventQueue(ctx, cfg.Global.DataDir, eventqueue.Options{
 		Logger:                      logger.With(slog.String("component", "eventqueue")),
 		EventsMaxAge:                cfg.Queue.EventsMaxAge.Duration,
 		EventsMaxBytes:              cfg.Queue.EventsMaxBytes,
@@ -101,7 +101,7 @@ func run() error {
 
 	// Start EventPusher
 	pushTimeout := cfg.Pusher.PushTimeout.Duration
-	ep := eventpusher.NewEventPusher(ctx, eq, k8sClient, eventpusher.EventPusherOptions{
+	ep := eventpusher.NewEventPusher(ctx, eq, k8sClient, eventpusher.Options{
 		Logger:      logger.With(slog.String("component", "eventpusher")),
 		PushTimeout: &pushTimeout,
 	})

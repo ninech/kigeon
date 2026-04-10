@@ -90,7 +90,7 @@ func NewDynamicNamespaceFilter(c kubernetes.Interface, cfg DynamicNamespaceFilte
 	}
 
 	// register event handlers
-	dnf.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	if _, err := dnf.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			ns, is := obj.(*corev1.Namespace)
 			if !is {
@@ -99,7 +99,7 @@ func NewDynamicNamespaceFilter(c kubernetes.Interface, cfg DynamicNamespaceFilte
 			dnf.logger.Debug("found new namespace on API", slog.String("name", ns.Name))
 			dnf.handleNamespaceChange(ns)
 		},
-		UpdateFunc: func(oldObj, newObj interface{}) {
+		UpdateFunc: func(_, newObj interface{}) {
 			ns, is := newObj.(*corev1.Namespace)
 			if !is {
 				return
@@ -115,7 +115,9 @@ func NewDynamicNamespaceFilter(c kubernetes.Interface, cfg DynamicNamespaceFilte
 			dnf.logger.Debug("got namespace deletion event from API", slog.String("name", ns.Name))
 			dnf.removeNamespace(ns.Name)
 		},
-	})
+	}); err != nil {
+		dnf.logger.Error("failed to register namespace event handler", slog.Any("error", err))
+	}
 
 	return dnf
 }

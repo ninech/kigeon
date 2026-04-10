@@ -51,15 +51,15 @@ type EventPusher struct {
 	wg sync.WaitGroup
 }
 
-// EventPusherOptions can be used to alter behaviour for the event pusher
-type EventPusherOptions struct {
+// Options can be used to alter behaviour for the event pusher
+type Options struct {
 	Logger         *slog.Logger
 	PushTimeout    *time.Duration
 	ResyncInterval *time.Duration
 }
 
 // NewEventPusher creates a new instance of EventPusher.
-func NewEventPusher(ctx context.Context, eq EventQueue, k8sClient kubernetes.Interface, options EventPusherOptions) *EventPusher {
+func NewEventPusher(ctx context.Context, eq EventQueue, k8sClient kubernetes.Interface, options Options) *EventPusher {
 	ctx, cancel := context.WithCancel(ctx)
 
 	resyncInterval := defaultResyncInterval
@@ -98,7 +98,7 @@ func NewEventPusher(ctx context.Context, eq EventQueue, k8sClient kubernetes.Int
 // registerEventHandler configures the K8s informer to send events to the internal channel.
 func (ep *EventPusher) registerEventHandler() {
 	informer := ep.factory.Core().V1().Events().Informer()
-	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	if _, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			if event, ok := obj.(*v1.Event); ok {
 				ep.enqueue(event)
@@ -115,10 +115,12 @@ func (ep *EventPusher) registerEventHandler() {
 				ep.enqueue(newEvent)
 			}
 		},
-		DeleteFunc: func(obj interface{}) {
+		DeleteFunc: func(_ interface{}) {
 			// no action needed for Kubernetes events.
 		},
-	})
+	}); err != nil {
+		ep.logger.Error("failed to register event handler", slog.Any("error", err))
+	}
 	ep.logger.Debug("event handler registered")
 }
 

@@ -6,17 +6,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ninech/kigeon/pkg/eventqueue"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+
+	"github.com/ninech/kigeon/pkg/eventqueue"
 )
 
-func defaultTestOptions() eventqueue.EventQueueOptions {
-	return eventqueue.EventQueueOptions{
+func defaultTestOptions() eventqueue.Options {
+	return eventqueue.Options{
 		EventsMaxAge:   time.Hour,
 		EventsMaxBytes: resource.MustParse("100Mi"),
 	}
