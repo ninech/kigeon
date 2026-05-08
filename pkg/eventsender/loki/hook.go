@@ -3,6 +3,7 @@ package loki
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -19,6 +20,10 @@ const (
 	defaultHookTimeout = 100 * time.Millisecond
 	podCacheTTL        = 30 * time.Second
 )
+
+// errSkip is returned by execute when the hook script returns None,
+// signalling that the event should be acknowledged without being sent.
+var errSkip = errors.New("hook: skip event")
 
 // hookExecutor runs a Starlark script to potentially modify the Loki config
 // per event. The script file is loaded and compiled once at construction;
@@ -139,6 +144,10 @@ func (h *hookExecutor) execute(ctx context.Context, cfg Config, event *corev1.Ev
 	result, err := starlark.Call(thread, h.fn, starlark.Tuple{configDict, eventDict}, nil)
 	if err != nil {
 		return Config{}, fmt.Errorf("starlark hook execution failed: %w", err)
+	}
+
+	if result == starlark.None {
+		return Config{}, errSkip
 	}
 
 	resultDict, ok := result.(*starlark.Dict)

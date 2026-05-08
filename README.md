@@ -111,6 +111,11 @@ config:
     usernameEnvVar: LOKI_USER
     passwordEnvVar: LOKI_PASS
 
+  # TLS configuration for the Loki HTTP client.
+  tlsConfig:
+    # Disable TLS certificate verification (e.g. for self-signed certs).
+    insecureSkipVerify: false
+
   # Optional Starlark hook — see "Hooks" section below.
   hook:
     script: /etc/kigeon/hooks/my-hook.star
@@ -126,11 +131,18 @@ dynamically modify the Loki sender config on a per-event basis — for example
 to route events to different tenants, add stream labels, or change credentials.
 
 The script must define a `transform(config, event)` function that receives the
-current config and the Kubernetes event as dicts, and returns the (potentially
-modified) config dict.
+current config and the Kubernetes event as dicts, and returns either the
+(potentially modified) config dict or `None` to skip the event entirely.
+
+Returning `None` acknowledges the event without sending it — useful for
+filtering out events that do not match your criteria:
 
 ```python
 def transform(config, event):
+    # Skip non-Pod events
+    if (event.get("involvedObject") or {}).get("kind") != "Pod":
+        return None
+
     ns = (event.get("metadata") or {}).get("namespace", "")
     if ns == "production":
         config["tenantID"] = "prod"

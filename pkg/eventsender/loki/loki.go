@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -133,6 +134,14 @@ func (s *Sender) processEvent(ctx context.Context) error {
 	effectiveConfig := s.config
 	if s.hook != nil {
 		hooked, err := s.hook.execute(ctx, s.config, event)
+		if errors.Is(err, errSkip) {
+			s.logger.Debug("hook skipped event",
+				slog.String("name", s.name),
+				slog.String("namespace", event.Namespace),
+				slog.String("reason", event.Reason),
+			)
+			return ack.Ack()
+		}
 		if err != nil {
 			return s.handleHookError(ctx, err, event, ack)
 		}

@@ -177,6 +177,18 @@ def transform(config, event):
 		assert.Contains(t, err.Error(), "must return a dict")
 	})
 
+	t.Run("hook returns None to skip event", func(t *testing.T) {
+		path := writeStarScript(t, `
+def transform(config, event):
+    return None
+`)
+		h, err := newHookExecutor(ConfigHook{Script: path}, testLogger(), nil)
+		require.NoError(t, err)
+
+		_, err = h.execute(context.Background(), baseConfig, event)
+		require.ErrorIs(t, err, errSkip)
+	})
+
 	t.Run("hook can read event reason", func(t *testing.T) {
 		path := writeStarScript(t, `
 def transform(config, event):
