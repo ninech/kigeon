@@ -196,6 +196,31 @@ func TestSender_sendToLoki(t *testing.T) {
 	}
 }
 
+func TestSender_tlsInsecureSkipVerify(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+
+	event := createTestEvent()
+
+	t.Run("rejects self-signed cert by default", func(t *testing.T) {
+		sender, err := NewSender("test", Config{URL: server.URL}, &eventqueue.EventFetcher{}, SenderOptions{})
+		require.NoError(t, err)
+		err = sender.sendToLoki(t.Context(), event, Config{URL: server.URL})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to send request")
+	})
+
+	t.Run("accepts self-signed cert with insecureSkipVerify", func(t *testing.T) {
+		cfg := Config{URL: server.URL, TLS: &TLSConfig{InsecureSkipVerify: true}}
+		sender, err := NewSender("test", cfg, &eventqueue.EventFetcher{}, SenderOptions{})
+		require.NoError(t, err)
+		err = sender.sendToLoki(t.Context(), event, cfg)
+		require.NoError(t, err)
+	})
+}
+
 func TestSender_buildLabels(t *testing.T) {
 	sender := &Sender{}
 	cfg := Config{

@@ -3,6 +3,7 @@ package loki
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -61,8 +62,13 @@ func NewSender(name string, config Config, eventFetcher *eventqueue.EventFetcher
 
 	httpClient := options.HTTPClient
 	if httpClient == nil {
+		transport := http.DefaultTransport.(*http.Transport).Clone()
+		if config.TLS != nil && config.TLS.InsecureSkipVerify {
+			transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec
+		}
 		httpClient = &http.Client{
-			Timeout: defaultTimeout,
+			Timeout:   defaultTimeout,
+			Transport: transport,
 		}
 	}
 

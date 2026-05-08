@@ -8,6 +8,13 @@ import (
 	"time"
 )
 
+// TLSConfig holds TLS-related settings for the Loki HTTP client.
+type TLSConfig struct {
+	// InsecureSkipVerify disables TLS certificate verification.
+	// Only use this when connecting to a Loki instance with a self-signed certificate.
+	InsecureSkipVerify bool `json:"insecureSkipVerify,omitempty"`
+}
+
 // Config provides a config struct to configure the Loki Sender plugin.
 type Config struct {
 	// URL is the URL to a Loki instance (e.g., "http://loki:3100")
@@ -16,6 +23,8 @@ type Config struct {
 	TenantID string `json:"tenantID,omitempty"`
 	// BasicAuth configures basic authentication for Loki
 	BasicAuth *BasicAuth `json:"basicAuth,omitempty"`
+	// TLS configures TLS settings for the Loki HTTP client
+	TLS *TLSConfig `json:"tlsConfig,omitempty"`
 	// StreamLabels configure the stream labels to use when sending the
 	// Kubernetes events to Loki. These labels are added to all log entries.
 	StreamLabels map[string]string `json:"streamLabels,omitempty"`
