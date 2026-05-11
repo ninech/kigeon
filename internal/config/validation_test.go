@@ -12,6 +12,7 @@ import (
 )
 
 func TestConfig_Validate(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		config         Config
@@ -183,6 +184,7 @@ func TestConfig_Validate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := tt.config.Validate()
 
 			if len(tt.expectedErrors) == 0 {
@@ -200,6 +202,7 @@ func TestConfig_Validate(t *testing.T) {
 }
 
 func TestValidationError_Error(t *testing.T) {
+	t.Parallel()
 	err := ValidationError{
 		Field:   "test.field",
 		Message: "is invalid",
@@ -208,12 +211,15 @@ func TestValidationError_Error(t *testing.T) {
 }
 
 func TestValidationErrors_Error(t *testing.T) {
+	t.Parallel()
 	t.Run("empty errors", func(t *testing.T) {
+		t.Parallel()
 		var errors ValidationErrors
 		assert.Equal(t, "", errors.Error())
 	})
 
 	t.Run("single error", func(t *testing.T) {
+		t.Parallel()
 		errors := ValidationErrors{
 			{Field: "field1", Message: "is required"},
 		}
@@ -221,6 +227,7 @@ func TestValidationErrors_Error(t *testing.T) {
 	})
 
 	t.Run("multiple errors", func(t *testing.T) {
+		t.Parallel()
 		errors := ValidationErrors{
 			{Field: "field1", Message: "is required"},
 			{Field: "field2", Message: "is invalid"},

@@ -10,12 +10,18 @@ linters:
     - staticcheck
     - unused
     - revive
+    - thelper
+    - paralleltest
   exclusions:
     rules:
       # Unchecked errors are acceptable in tests.
       - path: _test\.go
         linters:
           - errcheck
+      # TestParseConfig uses t.Setenv which is incompatible with t.Parallel.
+      - path: internal/eventsender/loki/factory_test.go
+        linters:
+          - paralleltest
 
 formatters:
   enable:

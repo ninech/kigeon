@@ -30,7 +30,9 @@ func testLogger() *slog.Logger {
 }
 
 func TestNewHookExecutor(t *testing.T) {
+	t.Parallel()
 	t.Run("valid script", func(t *testing.T) {
+		t.Parallel()
 		path := writeStarScript(t, `
 def transform(config, event):
     return config
@@ -41,6 +43,7 @@ def transform(config, event):
 	})
 
 	t.Run("script missing transform function", func(t *testing.T) {
+		t.Parallel()
 		path := writeStarScript(t, `x = 1`)
 		_, err := newHookExecutor(ConfigHook{Script: path}, testLogger(), nil)
 		require.Error(t, err)
@@ -48,6 +51,7 @@ def transform(config, event):
 	})
 
 	t.Run("transform is not a function", func(t *testing.T) {
+		t.Parallel()
 		path := writeStarScript(t, `transform = 42`)
 		_, err := newHookExecutor(ConfigHook{Script: path}, testLogger(), nil)
 		require.Error(t, err)
@@ -55,18 +59,21 @@ def transform(config, event):
 	})
 
 	t.Run("invalid starlark syntax", func(t *testing.T) {
+		t.Parallel()
 		path := writeStarScript(t, `def transform(config, event)`)
 		_, err := newHookExecutor(ConfigHook{Script: path}, testLogger(), nil)
 		require.Error(t, err)
 	})
 
 	t.Run("non-existent script", func(t *testing.T) {
+		t.Parallel()
 		_, err := newHookExecutor(ConfigHook{Script: "/does/not/exist.star"}, testLogger(), nil)
 		require.Error(t, err)
 	})
 }
 
 func TestHookExecutor_execute(t *testing.T) {
+	t.Parallel()
 	baseConfig := Config{
 		URL:          "http://loki:3100",
 		TenantID:     "default",
@@ -83,6 +90,7 @@ func TestHookExecutor_execute(t *testing.T) {
 	}
 
 	t.Run("pass-through hook", func(t *testing.T) {
+		t.Parallel()
 		path := writeStarScript(t, `
 def transform(config, event):
     return config
@@ -97,6 +105,7 @@ def transform(config, event):
 	})
 
 	t.Run("hook modifies tenantID based on namespace", func(t *testing.T) {
+		t.Parallel()
 		path := writeStarScript(t, `
 def transform(config, event):
     ns = event["metadata"]["namespace"]
@@ -114,6 +123,7 @@ def transform(config, event):
 	})
 
 	t.Run("hook modifies streamLabels", func(t *testing.T) {
+		t.Parallel()
 		path := writeStarScript(t, `
 def transform(config, event):
     labels = config.get("streamLabels") or {}
@@ -131,6 +141,7 @@ def transform(config, event):
 	})
 
 	t.Run("hook cannot change Hook field", func(t *testing.T) {
+		t.Parallel()
 		path := writeStarScript(t, `
 def transform(config, event):
     return config
@@ -149,6 +160,7 @@ def transform(config, event):
 	})
 
 	t.Run("hook times out", func(t *testing.T) {
+		t.Parallel()
 		path := writeStarScript(t, `
 def transform(config, event):
     # Infinite loop — Starlark will terminate via thread.Cancel
@@ -165,6 +177,7 @@ def transform(config, event):
 	})
 
 	t.Run("hook returns wrong type", func(t *testing.T) {
+		t.Parallel()
 		path := writeStarScript(t, `
 def transform(config, event):
     return "not a dict"
@@ -178,6 +191,7 @@ def transform(config, event):
 	})
 
 	t.Run("hook returns None to skip event", func(t *testing.T) {
+		t.Parallel()
 		path := writeStarScript(t, `
 def transform(config, event):
     return None
@@ -190,6 +204,7 @@ def transform(config, event):
 	})
 
 	t.Run("hook can read event reason", func(t *testing.T) {
+		t.Parallel()
 		path := writeStarScript(t, `
 def transform(config, event):
     if event["reason"] == "OOMKilled":
@@ -209,6 +224,7 @@ def transform(config, event):
 	})
 
 	t.Run("hook can print for debugging", func(t *testing.T) {
+		t.Parallel()
 		path := writeStarScript(t, `
 def transform(config, event):
     print("processing event:", event["metadata"]["name"])
@@ -222,6 +238,7 @@ def transform(config, event):
 	})
 
 	t.Run("hook can read pod labels when enrichPodLabels is enabled", func(t *testing.T) {
+		t.Parallel()
 		pod := &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "test-pod",
@@ -255,6 +272,7 @@ def transform(config, event):
 	})
 
 	t.Run("hook does not set podLabels for non-pod events", func(t *testing.T) {
+		t.Parallel()
 		kubeClient := fake.NewClientset()
 
 		path := writeStarScript(t, `
@@ -280,6 +298,7 @@ def transform(config, event):
 	})
 
 	t.Run("skipOnPodNotFound skips event when pod is missing", func(t *testing.T) {
+		t.Parallel()
 		kubeClient := fake.NewClientset() // no pods registered
 
 		path := writeStarScript(t, `
@@ -302,6 +321,7 @@ def transform(config, event):
 	})
 
 	t.Run("skipOnPodNotFound unset: calls hook when pod is missing", func(t *testing.T) {
+		t.Parallel()
 		kubeClient := fake.NewClientset()
 
 		path := writeStarScript(t, `
@@ -324,6 +344,7 @@ def transform(config, event):
 	})
 
 	t.Run("pod labels are served from cache on second call", func(t *testing.T) {
+		t.Parallel()
 		pod := &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "cached-pod",
@@ -363,25 +384,30 @@ def transform(config, event):
 }
 
 func TestGoValueToStarlark(t *testing.T) {
+	t.Parallel()
 	t.Run("nil becomes starlark.None", func(t *testing.T) {
+		t.Parallel()
 		val, err := goValueToStarlark(nil)
 		require.NoError(t, err)
 		assert.Equal(t, starlark.None, val)
 	})
 
 	t.Run("bool true", func(t *testing.T) {
+		t.Parallel()
 		val, err := goValueToStarlark(true)
 		require.NoError(t, err)
 		assert.Equal(t, starlark.Bool(true), val)
 	})
 
 	t.Run("bool false", func(t *testing.T) {
+		t.Parallel()
 		val, err := goValueToStarlark(false)
 		require.NoError(t, err)
 		assert.Equal(t, starlark.Bool(false), val)
 	})
 
 	t.Run("list with nested values", func(t *testing.T) {
+		t.Parallel()
 		input := []any{"hello", true, nil}
 		val, err := goValueToStarlark(input)
 		require.NoError(t, err)
@@ -394,6 +420,7 @@ func TestGoValueToStarlark(t *testing.T) {
 	})
 
 	t.Run("nested list (list inside a list)", func(t *testing.T) {
+		t.Parallel()
 		input := []any{[]any{"a", "b"}, "c"}
 		val, err := goValueToStarlark(input)
 		require.NoError(t, err)
@@ -409,6 +436,7 @@ func TestGoValueToStarlark(t *testing.T) {
 	})
 
 	t.Run("unsupported type returns error", func(t *testing.T) {
+		t.Parallel()
 		type myStruct struct{ X int }
 		_, err := goValueToStarlark(myStruct{X: 1})
 		require.Error(t, err)
@@ -417,19 +445,23 @@ func TestGoValueToStarlark(t *testing.T) {
 }
 
 func TestStarlarkValueToGo(t *testing.T) {
+	t.Parallel()
 	t.Run("starlark.None becomes nil", func(t *testing.T) {
+		t.Parallel()
 		got, err := starlarkValueToGo(starlark.None)
 		require.NoError(t, err)
 		assert.Nil(t, got)
 	})
 
 	t.Run("starlark.Bool true", func(t *testing.T) {
+		t.Parallel()
 		got, err := starlarkValueToGo(starlark.Bool(true))
 		require.NoError(t, err)
 		assert.Equal(t, true, got)
 	})
 
 	t.Run("starlark.Int returns int64", func(t *testing.T) {
+		t.Parallel()
 		sv := starlark.MakeInt(42)
 		got, err := starlarkValueToGo(sv)
 		require.NoError(t, err)
@@ -437,6 +469,7 @@ func TestStarlarkValueToGo(t *testing.T) {
 	})
 
 	t.Run("starlark.Int overflow returns error", func(t *testing.T) {
+		t.Parallel()
 		// Construct an integer value that overflows int64.
 		huge := new(big.Int).SetUint64(^uint64(0)) // 2^64 - 1
 		sv := starlark.MakeBigInt(huge)
@@ -446,6 +479,7 @@ func TestStarlarkValueToGo(t *testing.T) {
 	})
 
 	t.Run("starlark.Tuple is unsupported", func(t *testing.T) {
+		t.Parallel()
 		tuple := starlark.Tuple{starlark.String("a"), starlark.String("b")}
 		_, err := starlarkValueToGo(tuple)
 		require.Error(t, err)
@@ -453,6 +487,7 @@ func TestStarlarkValueToGo(t *testing.T) {
 	})
 
 	t.Run("starlark.Set is unsupported", func(t *testing.T) {
+		t.Parallel()
 		set := starlark.NewSet(2)
 		require.NoError(t, set.Insert(starlark.String("x")))
 		_, err := starlarkValueToGo(set)
@@ -461,6 +496,7 @@ func TestStarlarkValueToGo(t *testing.T) {
 	})
 
 	t.Run("nested list inside list", func(t *testing.T) {
+		t.Parallel()
 		inner := starlark.NewList([]starlark.Value{starlark.String("a")})
 		outer := starlark.NewList([]starlark.Value{inner, starlark.String("b")})
 		got, err := starlarkValueToGo(outer)

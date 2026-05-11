@@ -29,6 +29,7 @@ func eventually(t *testing.T, timeout time.Duration, condition func() bool) bool
 }
 
 func TestNewDynamicNamespaceFilter(t *testing.T) {
+	t.Parallel()
 	client := fake.NewSimpleClientset()
 
 	selector, err := labels.Parse("env=production")
@@ -42,6 +43,7 @@ func TestNewDynamicNamespaceFilter(t *testing.T) {
 }
 
 func TestDynamicNamespaceFilter_Start(t *testing.T) {
+	t.Parallel()
 	client := fake.NewSimpleClientset()
 
 	selector, err := labels.Parse("env=production")
@@ -61,6 +63,7 @@ func TestDynamicNamespaceFilter_Start(t *testing.T) {
 }
 
 func TestDynamicNamespaceFilter_StartReturnsErrorOnTimeout(t *testing.T) {
+	t.Parallel()
 	client := fake.NewSimpleClientset()
 
 	selector, err := labels.Parse("env=production")
@@ -81,6 +84,7 @@ func TestDynamicNamespaceFilter_StartReturnsErrorOnTimeout(t *testing.T) {
 }
 
 func TestDynamicNamespaceFilter_AddsMatchingNamespaces(t *testing.T) {
+	t.Parallel()
 	// Create a namespace that matches the selector
 	matchingNS := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -114,6 +118,7 @@ func TestDynamicNamespaceFilter_AddsMatchingNamespaces(t *testing.T) {
 }
 
 func TestDynamicNamespaceFilter_IgnoresNonMatchingNamespaces(t *testing.T) {
+	t.Parallel()
 	// Create a namespace that doesn't match the selector
 	nonMatchingNS := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -146,6 +151,7 @@ func TestDynamicNamespaceFilter_IgnoresNonMatchingNamespaces(t *testing.T) {
 }
 
 func TestDynamicNamespaceFilter_HandlesNamespaceUpdates(t *testing.T) {
+	t.Parallel()
 	// Start with a non-matching namespace
 	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -188,6 +194,7 @@ func TestDynamicNamespaceFilter_HandlesNamespaceUpdates(t *testing.T) {
 }
 
 func TestDynamicNamespaceFilter_HandlesNamespaceDeletion(t *testing.T) {
+	t.Parallel()
 	// Create a matching namespace
 	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -230,6 +237,7 @@ func TestDynamicNamespaceFilter_HandlesNamespaceDeletion(t *testing.T) {
 }
 
 func TestDynamicNamespaceFilter_IsAllowedForObject_WithNamespace(t *testing.T) {
+	t.Parallel()
 	// Create a matching namespace
 	ns := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -279,6 +287,7 @@ func TestDynamicNamespaceFilter_IsAllowedForObject_WithNamespace(t *testing.T) {
 }
 
 func TestDynamicNamespaceFilter_IsAllowedForObject_NonNamespaced(t *testing.T) {
+	t.Parallel()
 	client := fake.NewSimpleClientset()
 
 	selector, err := labels.Parse("env=production")
@@ -317,6 +326,7 @@ func TestDynamicNamespaceFilter_IsAllowedForObject_NonNamespaced(t *testing.T) {
 }
 
 func TestDynamicNamespaceFilter_CustomHardRefreshInterval(t *testing.T) {
+	t.Parallel()
 	client := fake.NewSimpleClientset()
 
 	selector, err := labels.Parse("env=production")
@@ -333,6 +343,7 @@ func TestDynamicNamespaceFilter_CustomHardRefreshInterval(t *testing.T) {
 }
 
 func TestDynamicNamespaceFilter_MatchesAllSelector(t *testing.T) {
+	t.Parallel()
 	// Create multiple namespaces
 	ns1 := &corev1.Namespace{
 		ObjectMeta: metav1.ObjectMeta{
@@ -368,6 +379,7 @@ func TestDynamicNamespaceFilter_MatchesAllSelector(t *testing.T) {
 }
 
 func TestDynamicNamespaceFilter_Stop(t *testing.T) {
+	t.Parallel()
 	client := fake.NewSimpleClientset()
 
 	selector, err := labels.Parse("env=production")

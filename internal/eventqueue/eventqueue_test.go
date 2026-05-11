@@ -35,11 +35,13 @@ func startTestQueue(t *testing.T) *eventqueue.EventQueue {
 }
 
 func TestStartEventQueue(t *testing.T) {
+	t.Parallel()
 	eq := startTestQueue(t)
 	defer eq.Stop()
 }
 
 func TestEventQueue_PublishAndFetch(t *testing.T) {
+	t.Parallel()
 	eq := startTestQueue(t)
 	defer eq.Stop()
 
@@ -72,6 +74,7 @@ func TestEventQueue_PublishAndFetch(t *testing.T) {
 }
 
 func TestEventQueue_Deduplication(t *testing.T) {
+	t.Parallel()
 	eq := startTestQueue(t)
 	defer eq.Stop()
 
@@ -107,6 +110,7 @@ func TestEventQueue_Deduplication(t *testing.T) {
 }
 
 func TestEventQueue_DifferentCountsAreNotDeduplicated(t *testing.T) {
+	t.Parallel()
 	eq := startTestQueue(t)
 	defer eq.Stop()
 
@@ -142,6 +146,7 @@ func TestEventQueue_DifferentCountsAreNotDeduplicated(t *testing.T) {
 }
 
 func TestEventQueue_MultipleSubscribers(t *testing.T) {
+	t.Parallel()
 	eq := startTestQueue(t)
 	defer eq.Stop()
 
@@ -175,6 +180,7 @@ func TestEventQueue_MultipleSubscribers(t *testing.T) {
 }
 
 func TestEventQueue_PersistenceAcrossRestart(t *testing.T) {
+	t.Parallel()
 	dataDir := t.TempDir()
 
 	// Start the queue and publish an event
@@ -219,6 +225,7 @@ func TestEventQueue_PersistenceAcrossRestart(t *testing.T) {
 }
 
 func TestEventQueue_Stop(t *testing.T) {
+	t.Parallel()
 	eq := startTestQueue(t)
 
 	// Stop should not panic and should complete without error
@@ -226,6 +233,7 @@ func TestEventQueue_Stop(t *testing.T) {
 }
 
 func TestStartEventQueue_CreatesDataDirectory(t *testing.T) {
+	t.Parallel()
 	baseDir := t.TempDir()
 	dataDir := baseDir + "/nested/data/dir"
 

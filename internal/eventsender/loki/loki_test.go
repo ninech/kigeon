@@ -20,6 +20,7 @@ import (
 )
 
 func TestNewSender(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		senderName  string
@@ -58,6 +59,7 @@ func TestNewSender(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			sender, err := NewSender(tt.senderName, tt.config, tt.fetcher, SenderOptions{})
 			if tt.expectError != "" {
 				require.Error(t, err)
@@ -72,6 +74,7 @@ func TestNewSender(t *testing.T) {
 }
 
 func TestSender_sendToLoki(t *testing.T) {
+	t.Parallel()
 	event := createTestEvent()
 
 	tests := []struct {
@@ -87,6 +90,7 @@ func TestSender_sendToLoki(t *testing.T) {
 			config:         Config{},
 			serverResponse: http.StatusNoContent,
 			validateReq: func(t *testing.T, req *http.Request, body []byte) {
+				t.Helper()
 				assert.Equal(t, "application/json", req.Header.Get("Content-Type"))
 				assert.Equal(t, "/loki/api/v1/push", req.URL.Path)
 
@@ -105,6 +109,7 @@ func TestSender_sendToLoki(t *testing.T) {
 			},
 			serverResponse: http.StatusNoContent,
 			validateReq: func(t *testing.T, req *http.Request, _ []byte) {
+				t.Helper()
 				assert.Equal(t, "test-tenant", req.Header.Get("X-Scope-OrgID"))
 			},
 		},
@@ -118,6 +123,7 @@ func TestSender_sendToLoki(t *testing.T) {
 			},
 			serverResponse: http.StatusNoContent,
 			validateReq: func(t *testing.T, req *http.Request, _ []byte) {
+				t.Helper()
 				user, pass, ok := req.BasicAuth()
 				assert.True(t, ok)
 				assert.Equal(t, "user", user)
@@ -134,6 +140,7 @@ func TestSender_sendToLoki(t *testing.T) {
 			},
 			serverResponse: http.StatusNoContent,
 			validateReq: func(t *testing.T, _ *http.Request, body []byte) {
+				t.Helper()
 				var payload lokiPushPayload
 				err := json.Unmarshal(body, &payload)
 				require.NoError(t, err)
@@ -152,6 +159,7 @@ func TestSender_sendToLoki(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			var capturedReq *http.Request
 			var capturedBody []byte
 
@@ -197,14 +205,16 @@ func TestSender_sendToLoki(t *testing.T) {
 }
 
 func TestSender_tlsInsecureSkipVerify(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
-	defer server.Close()
+	t.Cleanup(server.Close)
 
 	event := createTestEvent()
 
 	t.Run("rejects self-signed cert by default", func(t *testing.T) {
+		t.Parallel()
 		sender, err := NewSender("test", Config{URL: server.URL}, &eventqueue.EventFetcher{}, SenderOptions{})
 		require.NoError(t, err)
 		err = sender.sendToLoki(t.Context(), event, Config{URL: server.URL})
@@ -213,6 +223,7 @@ func TestSender_tlsInsecureSkipVerify(t *testing.T) {
 	})
 
 	t.Run("accepts self-signed cert with insecureSkipVerify", func(t *testing.T) {
+		t.Parallel()
 		cfg := Config{URL: server.URL, TLS: &TLSConfig{InsecureSkipVerify: true}}
 		sender, err := NewSender("test", cfg, &eventqueue.EventFetcher{}, SenderOptions{})
 		require.NoError(t, err)
@@ -222,6 +233,7 @@ func TestSender_tlsInsecureSkipVerify(t *testing.T) {
 }
 
 func TestSender_buildLabels(t *testing.T) {
+	t.Parallel()
 	sender := &Sender{}
 	cfg := Config{
 		StreamLabels: map[string]string{
@@ -243,6 +255,7 @@ func TestSender_buildLabels(t *testing.T) {
 }
 
 func TestSender_buildLabels_overridesStreamLabels(t *testing.T) {
+	t.Parallel()
 	sender := &Sender{}
 	cfg := Config{
 		StreamLabels: map[string]string{
@@ -261,6 +274,7 @@ func TestSender_buildLabels_overridesStreamLabels(t *testing.T) {
 }
 
 func TestSender_getEventTimestamp(t *testing.T) {
+	t.Parallel()
 	sender := &Sender{}
 	now := time.Now()
 
@@ -297,6 +311,7 @@ func TestSender_getEventTimestamp(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := sender.getEventTimestamp(tt.event)
 			assert.Equal(t, tt.expected.Unix(), result.Unix())
 		})
@@ -304,6 +319,7 @@ func TestSender_getEventTimestamp(t *testing.T) {
 }
 
 func TestSender_formatEventMessage(t *testing.T) {
+	t.Parallel()
 	sender := &Sender{}
 	event := createTestEvent()
 
@@ -324,9 +340,11 @@ func TestSender_formatEventMessage(t *testing.T) {
 }
 
 func TestSender_buildPushPayload(t *testing.T) {
+	t.Parallel()
 	sender := &Sender{}
 
 	t.Run("uses formatted event message by default", func(t *testing.T) {
+		t.Parallel()
 		cfg := Config{StreamLabels: map[string]string{"app": "kigeon"}}
 		event := createTestEvent()
 		payload := sender.buildPushPayload(event, cfg)
@@ -342,6 +360,7 @@ func TestSender_buildPushPayload(t *testing.T) {
 	})
 
 	t.Run("uses config message override when set", func(t *testing.T) {
+		t.Parallel()
 		cfg := Config{Message: "pulled container image"}
 		event := createTestEvent()
 		payload := sender.buildPushPayload(event, cfg)
@@ -363,6 +382,7 @@ func (m *mockAck) Ack() error {
 }
 
 func TestSender_handleHookError(t *testing.T) {
+	t.Parallel()
 	hookErr := fmt.Errorf("hook exploded")
 
 	newServerAndSender := func(t *testing.T, cfg Config) (*httptest.Server, *Sender, *[]string) {
@@ -384,6 +404,7 @@ func TestSender_handleHookError(t *testing.T) {
 	}
 
 	t.Run("use-default sends with base config and acks", func(t *testing.T) {
+		t.Parallel()
 		hookCfg := &ConfigHook{OnError: "use-default"}
 		cfg := Config{URL: "placeholder", Hook: hookCfg}
 		_, sender, paths := newServerAndSender(t, cfg)
@@ -400,6 +421,7 @@ func TestSender_handleHookError(t *testing.T) {
 	})
 
 	t.Run("skip acks without sending", func(t *testing.T) {
+		t.Parallel()
 		hookCfg := &ConfigHook{OnError: "skip"}
 		cfg := Config{URL: "placeholder", Hook: hookCfg}
 		_, sender, paths := newServerAndSender(t, cfg)
@@ -415,6 +437,7 @@ func TestSender_handleHookError(t *testing.T) {
 	})
 
 	t.Run("fail returns error without acking", func(t *testing.T) {
+		t.Parallel()
 		hookCfg := &ConfigHook{OnError: "fail"}
 		cfg := Config{URL: "placeholder", Hook: hookCfg}
 		_, sender, paths := newServerAndSender(t, cfg)
@@ -431,6 +454,7 @@ func TestSender_handleHookError(t *testing.T) {
 	})
 
 	t.Run("nil Hook behaves like use-default", func(t *testing.T) {
+		t.Parallel()
 		cfg := Config{URL: "placeholder", Hook: nil}
 		_, sender, paths := newServerAndSender(t, cfg)
 
@@ -446,6 +470,7 @@ func TestSender_handleHookError(t *testing.T) {
 	})
 
 	t.Run("skip with ack failure propagates error", func(t *testing.T) {
+		t.Parallel()
 		ackErr := fmt.Errorf("nats is down")
 		hookCfg := &ConfigHook{OnError: "skip"}
 		cfg := Config{URL: "placeholder", Hook: hookCfg}

@@ -13,6 +13,7 @@ import (
 )
 
 func TestParse(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		yaml        string
@@ -49,6 +50,7 @@ eventsenders:
       tenantID: production
 `,
 			validate: func(t *testing.T, cfg *Config) {
+				t.Helper()
 				assert.Equal(t, "/data/kigeon", cfg.Global.DataDir)
 				assert.Equal(t, "debug", cfg.Global.LogLevel)
 				assert.Equal(t, "text", cfg.Global.LogFormat)
@@ -84,6 +86,7 @@ eventsenders:
       url: http://loki:3100
 `,
 			validate: func(t *testing.T, cfg *Config) {
+				t.Helper()
 				// Check defaults
 				assert.Equal(t, "/var/lib/kigeon/data", cfg.Global.DataDir)
 				assert.Equal(t, "info", cfg.Global.LogLevel)
@@ -113,6 +116,7 @@ eventsenders:
       url: http://loki-staging:3100
 `,
 			validate: func(t *testing.T, cfg *Config) {
+				t.Helper()
 				require.Len(t, cfg.EventSenders, 2)
 				assert.Equal(t, "loki-prod", cfg.EventSenders[0].Name)
 				assert.Equal(t, "loki-staging", cfg.EventSenders[1].Name)
@@ -127,6 +131,7 @@ eventsenders:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			cfg, err := Parse([]byte(tt.yaml))
 			if tt.expectError {
 				require.Error(t, err)
@@ -141,7 +146,9 @@ eventsenders:
 }
 
 func TestLoad(t *testing.T) {
+	t.Parallel()
 	t.Run("loads config from file", func(t *testing.T) {
+		t.Parallel()
 		dir := t.TempDir()
 		configFile := filepath.Join(dir, "config.yaml")
 
@@ -163,6 +170,7 @@ eventsenders:
 	})
 
 	t.Run("returns error for non-existent file", func(t *testing.T) {
+		t.Parallel()
 		_, err := Load("/non/existent/path.yaml")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to read config file")

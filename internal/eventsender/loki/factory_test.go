@@ -20,6 +20,7 @@ func TestParseConfig(t *testing.T) {
 			name:      "valid full config",
 			rawConfig: json.RawMessage(`{"url":"http://loki:3100","tenantID":"prod","streamLabels":{"app":"kigeon"},"batchSize":50}`),
 			validate: func(t *testing.T, cfg Config) {
+				t.Helper()
 				assert.Equal(t, "http://loki:3100", cfg.URL)
 				assert.Equal(t, "prod", cfg.TenantID)
 				assert.Equal(t, map[string]string{"app": "kigeon"}, cfg.StreamLabels)
@@ -30,6 +31,7 @@ func TestParseConfig(t *testing.T) {
 			name:      "minimal config with only URL",
 			rawConfig: json.RawMessage(`{"url":"http://loki:3100"}`),
 			validate: func(t *testing.T, cfg Config) {
+				t.Helper()
 				assert.Equal(t, "http://loki:3100", cfg.URL)
 				assert.Empty(t, cfg.TenantID)
 				assert.Nil(t, cfg.BasicAuth)
@@ -40,6 +42,7 @@ func TestParseConfig(t *testing.T) {
 			name:      "basic auth with direct credentials",
 			rawConfig: json.RawMessage(`{"url":"http://loki:3100","basicAuth":{"username":"user","password":"pass"}}`),
 			validate: func(t *testing.T, cfg Config) {
+				t.Helper()
 				require.NotNil(t, cfg.BasicAuth)
 				assert.Equal(t, "user", cfg.BasicAuth.Username)
 				assert.Equal(t, "pass", cfg.BasicAuth.Password)
@@ -49,10 +52,12 @@ func TestParseConfig(t *testing.T) {
 			name:      "basic auth with env var references",
 			rawConfig: json.RawMessage(`{"url":"http://loki:3100","basicAuth":{"usernameEnvVar":"LOKI_USER","passwordEnvVar":"LOKI_PASS"}}`),
 			setup: func(t *testing.T) {
+				t.Helper()
 				t.Setenv("LOKI_USER", "env-user")
 				t.Setenv("LOKI_PASS", "env-pass")
 			},
 			validate: func(t *testing.T, cfg Config) {
+				t.Helper()
 				require.NotNil(t, cfg.BasicAuth)
 				assert.Equal(t, "env-user", cfg.BasicAuth.Username)
 				assert.Equal(t, "env-pass", cfg.BasicAuth.Password)
@@ -62,10 +67,12 @@ func TestParseConfig(t *testing.T) {
 			name:      "direct credentials take precedence over env var references",
 			rawConfig: json.RawMessage(`{"url":"http://loki:3100","basicAuth":{"username":"direct-user","usernameEnvVar":"LOKI_USER","password":"direct-pass","passwordEnvVar":"LOKI_PASS"}}`),
 			setup: func(t *testing.T) {
+				t.Helper()
 				t.Setenv("LOKI_USER", "env-user")
 				t.Setenv("LOKI_PASS", "env-pass")
 			},
 			validate: func(t *testing.T, cfg Config) {
+				t.Helper()
 				require.NotNil(t, cfg.BasicAuth)
 				assert.Equal(t, "direct-user", cfg.BasicAuth.Username)
 				assert.Equal(t, "direct-pass", cfg.BasicAuth.Password)
@@ -85,6 +92,7 @@ func TestParseConfig(t *testing.T) {
 			name:      "valid hook config",
 			rawConfig: json.RawMessage(`{"url":"http://loki:3100","hook":{"script":"/etc/kigeon/hook.star","timeout":100000000,"onError":"skip"}}`),
 			validate: func(t *testing.T, cfg Config) {
+				t.Helper()
 				require.NotNil(t, cfg.Hook)
 				assert.Equal(t, "/etc/kigeon/hook.star", cfg.Hook.Script)
 				assert.Equal(t, "skip", cfg.Hook.OnError)
@@ -104,6 +112,7 @@ func TestParseConfig(t *testing.T) {
 			name:      "empty object config",
 			rawConfig: json.RawMessage(`{}`),
 			validate: func(t *testing.T, cfg Config) {
+				t.Helper()
 				assert.Empty(t, cfg.URL)
 				assert.Empty(t, cfg.TenantID)
 				assert.Nil(t, cfg.BasicAuth)

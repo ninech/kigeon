@@ -20,18 +20,21 @@ func (s *stubSender) Run(_ context.Context) error { return nil }
 func (s *stubSender) Stop()                       {}
 
 func TestCreate_unknownType(t *testing.T) {
+	t.Parallel()
 	_, err := eventsender.Create("test-unknown-abc123", "my-sender", nil, nil, eventsender.FactoryOptions{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown sender type")
 }
 
 func TestRegister_nilFactoryPanics(t *testing.T) {
+	t.Parallel()
 	assert.Panics(t, func() {
 		eventsender.Register("test-nil-factory-xyz789", nil)
 	})
 }
 
 func TestRegister_duplicatePanics(t *testing.T) {
+	t.Parallel()
 	factory := func(name string, _ json.RawMessage, _ *eventqueue.EventFetcher, _ eventsender.FactoryOptions) (eventsender.EventSender, error) {
 		return &stubSender{name: name}, nil
 	}
@@ -42,6 +45,7 @@ func TestRegister_duplicatePanics(t *testing.T) {
 }
 
 func TestRegisteredTypes_includesFreshType(t *testing.T) {
+	t.Parallel()
 	const typeName = "test-fresh-type-poiuy2"
 	factory := func(name string, _ json.RawMessage, _ *eventqueue.EventFetcher, _ eventsender.FactoryOptions) (eventsender.EventSender, error) {
 		return &stubSender{name: name}, nil
@@ -53,6 +57,7 @@ func TestRegisteredTypes_includesFreshType(t *testing.T) {
 }
 
 func TestCreate_callsFactoryWithCorrectName(t *testing.T) {
+	t.Parallel()
 	const typeName = "test-factory-call-asdfg3"
 	var capturedName string
 

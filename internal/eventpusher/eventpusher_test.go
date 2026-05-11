@@ -59,6 +59,7 @@ func (f *fakeEventQueue) getEvents() []*corev1.Event {
 }
 
 func TestEventPusher(t *testing.T) {
+	t.Parallel()
 	const (
 		firstEvent, secondEvent = "pod-1234", "pod-5678"
 	)
@@ -182,6 +183,7 @@ func TestEventPusher(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			is := require.New(t)
 			fakeClient := fake.NewSimpleClientset()
 
