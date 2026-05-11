@@ -279,6 +279,50 @@ def transform(config, event):
 		assert.Equal(t, "default", result.TenantID)
 	})
 
+	t.Run("skipOnPodNotFound skips event when pod is missing", func(t *testing.T) {
+		kubeClient := fake.NewClientset() // no pods registered
+
+		path := writeStarScript(t, `
+def transform(config, event):
+    return config
+`)
+		h, err := newHookExecutor(ConfigHook{Script: path, EnrichPod: true, SkipOnPodNotFound: true}, testLogger(), kubeClient)
+		require.NoError(t, err)
+
+		podEvent := &corev1.Event{
+			ObjectMeta: metav1.ObjectMeta{Name: "ev", Namespace: "default"},
+			InvolvedObject: corev1.ObjectReference{
+				Kind:      "Pod",
+				Name:      "gone-pod",
+				Namespace: "default",
+			},
+		}
+		_, err = h.execute(context.Background(), baseConfig, podEvent)
+		require.ErrorIs(t, err, errSkip)
+	})
+
+	t.Run("skipOnPodNotFound unset: calls hook when pod is missing", func(t *testing.T) {
+		kubeClient := fake.NewClientset()
+
+		path := writeStarScript(t, `
+def transform(config, event):
+    return config
+`)
+		h, err := newHookExecutor(ConfigHook{Script: path, EnrichPod: true, SkipOnPodNotFound: false}, testLogger(), kubeClient)
+		require.NoError(t, err)
+
+		podEvent := &corev1.Event{
+			ObjectMeta: metav1.ObjectMeta{Name: "ev", Namespace: "default"},
+			InvolvedObject: corev1.ObjectReference{
+				Kind:      "Pod",
+				Name:      "gone-pod",
+				Namespace: "default",
+			},
+		}
+		_, err = h.execute(context.Background(), baseConfig, podEvent)
+		require.NoError(t, err)
+	})
+
 	t.Run("pod labels are served from cache on second call", func(t *testing.T) {
 		pod := &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{

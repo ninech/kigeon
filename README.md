@@ -92,7 +92,7 @@ eventsenders:
 
 ```yaml
 config:
-  # Required. Loki push endpoint.
+  # Required. Base URL of the Loki instance (e.g. http://loki:3100, without path).
   url: http://loki:3100
 
   # X-Scope-OrgID header for multi-tenant Loki.
@@ -157,6 +157,7 @@ def transform(config, event):
 | `timeout` | Max execution time per event | `100ms` |
 | `onError` | Behaviour on script error: `use-default`, `skip`, `fail` | `use-default` |
 | `enrichPod` | Fetch the full Pod definition and expose it as `pod` on the event dict | `false` |
+| `skipOnPodNotFound` | Skip the event (without calling the hook) if the involved Pod no longer exists. Only meaningful with `enrichPod: true`. Transient API errors still fall through to the hook. | `false` |
 
 ### `onError` behaviour
 

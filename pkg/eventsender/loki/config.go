@@ -70,6 +70,10 @@ type ConfigHook struct {
 	// warm cache from any prior event on the same pod is usually sufficient to
 	// cover OOM events.
 	EnrichPod bool `json:"enrichPod,omitempty"`
+	// SkipOnPodNotFound, when true, skips the event without calling the hook
+	// if the involved Pod no longer exists in the Kubernetes API.
+	// Only meaningful when EnrichPod is true.
+	SkipOnPodNotFound bool `json:"skipOnPodNotFound,omitempty"`
 }
 
 func (h *ConfigHook) validate() error {

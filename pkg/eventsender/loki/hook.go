@@ -12,6 +12,7 @@ import (
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
 	corev1 "k8s.io/api/core/v1"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -21,9 +22,15 @@ const (
 	podCacheTTL        = 30 * time.Second
 )
 
-// errSkip is returned by execute when the hook script returns None,
-// signalling that the event should be acknowledged without being sent.
+// errSkip is returned by execute when the event should be acknowledged
+// without being sent — either because the hook script returned None, or
+// because the pod was not found and SkipOnPodNotFound is set.
 var errSkip = errors.New("hook: skip event")
+
+// errPodNotFound is a sentinel returned by enrichPod when the pod does not
+// exist in the Kubernetes API (404). Distinct from transient errors so callers
+// can react differently.
+var errPodNotFound = errors.New("pod not found")
 
 // hookExecutor runs a Starlark script to potentially modify the Loki config
 // per event. The script file is loaded and compiled once at construction;
@@ -119,7 +126,10 @@ func (h *hookExecutor) execute(ctx context.Context, cfg Config, event *corev1.Ev
 
 	if h.hook.EnrichPod && event.InvolvedObject.Kind == "Pod" {
 		if err := h.enrichPod(ctx, eventDict, event.InvolvedObject.Namespace, event.InvolvedObject.Name); err != nil {
-			h.logger.Warn("failed to enrich event with pod definition",
+			if errors.Is(err, errPodNotFound) && h.hook.SkipOnPodNotFound {
+				return Config{}, errSkip
+			}
+			h.logger.Debug("failed to enrich event with pod definition",
 				slog.String("pod", event.InvolvedObject.Namespace+"/"+event.InvolvedObject.Name),
 				slog.String("error", err.Error()),
 			)
@@ -175,6 +185,9 @@ func (h *hookExecutor) enrichPod(ctx context.Context, eventDict *starlark.Dict, 
 		var err error
 		pod, err = h.kubeClient.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				return errPodNotFound
+			}
 			return fmt.Errorf("getting pod %s/%s: %w", namespace, name, err)
 		}
 		h.podCache.set(namespace, name, pod)
