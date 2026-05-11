@@ -127,6 +127,7 @@ config:
     timeout: 100ms       # Max execution time per event. Default: 100ms
     onError: use-default # use-default | skip | fail
     enrichPod: false     # Fetch full Pod definition and expose it as "pod"
+    skipOnPodNotFound: true  # Skip event if the involved Pod no longer exists
 ```
 
 ## Hooks
