@@ -30,8 +30,11 @@ events that have already been delivered.
 
 ## Installation
 
+Container images are published to `ghcr.io/ninech/kigeon` for each release.
+See the [releases page](https://github.com/ninech/kigeon/releases) for available versions.
+
 ```bash
-go install github.com/ninech/kigeon/cmd/kigeon@latest
+docker pull ghcr.io/ninech/kigeon:0.0.1
 ```
 
 ## Configuration

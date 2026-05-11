@@ -18,6 +18,30 @@ jobs:
 
       - run: go test ./...
 
+  update-readme:
+    name: Update README version
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Update version in README
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          sed -i "s|ghcr.io/ninech/kigeon:[0-9]*\.[0-9]*\.[0-9]*|ghcr.io/ninech/kigeon:${VERSION}|g" README.md
+
+      - name: Commit updated README
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git diff --staged --quiet || git commit -m "Update README to $(git describe --tags --abbrev=0)"
+          git push
+
   build-push:
     name: Build and push image
     runs-on: ubuntu-latest
