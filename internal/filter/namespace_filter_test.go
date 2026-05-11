@@ -12,7 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes/fake"
 
-	"github.com/ninech/kigeon/pkg/filter"
+	"github.com/ninech/kigeon/internal/filter"
 )
 
 // eventually polls a condition function until it returns true or the timeout expires.

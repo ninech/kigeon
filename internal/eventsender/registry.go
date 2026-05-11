@@ -8,8 +8,8 @@ import (
 
 	"k8s.io/client-go/kubernetes"
 
-	"github.com/ninech/kigeon/pkg/eventqueue"
-	"github.com/ninech/kigeon/pkg/filter"
+	"github.com/ninech/kigeon/internal/eventqueue"
+	"github.com/ninech/kigeon/internal/filter"
 )
 
 // FactoryOptions provides common options for creating event senders.

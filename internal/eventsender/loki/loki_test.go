@@ -16,7 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/ninech/kigeon/pkg/eventqueue"
+	"github.com/ninech/kigeon/internal/eventqueue"
 )
 
 func TestNewSender(t *testing.T) {

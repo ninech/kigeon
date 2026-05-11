@@ -12,14 +12,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ninech/kigeon/pkg/config"
-	"github.com/ninech/kigeon/pkg/eventpusher"
-	"github.com/ninech/kigeon/pkg/eventqueue"
-	"github.com/ninech/kigeon/pkg/eventsender"
-	"github.com/ninech/kigeon/pkg/filter"
+	"github.com/ninech/kigeon/internal/config"
+	"github.com/ninech/kigeon/internal/eventpusher"
+	"github.com/ninech/kigeon/internal/eventqueue"
+	"github.com/ninech/kigeon/internal/eventsender"
+	"github.com/ninech/kigeon/internal/filter"
 
 	// import sender packages to register them
-	_ "github.com/ninech/kigeon/pkg/eventsender/loki"
+	_ "github.com/ninech/kigeon/internal/eventsender/loki"
 
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/kubernetes"

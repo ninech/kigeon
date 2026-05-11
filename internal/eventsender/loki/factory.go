@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/ninech/kigeon/pkg/eventqueue"
-	"github.com/ninech/kigeon/pkg/eventsender"
+	"github.com/ninech/kigeon/internal/eventqueue"
+	"github.com/ninech/kigeon/internal/eventsender"
 )
 
 // TypeName is the registered sender type name for the Loki sender.

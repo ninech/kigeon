@@ -17,7 +17,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/utils/ptr"
 
-	"github.com/ninech/kigeon/pkg/eventpusher"
+	"github.com/ninech/kigeon/internal/eventpusher"
 )
 
 const (

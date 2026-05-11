@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ninech/kigeon/pkg/eventqueue"
-	"github.com/ninech/kigeon/pkg/eventsender"
+	"github.com/ninech/kigeon/internal/eventqueue"
+	"github.com/ninech/kigeon/internal/eventsender"
 )
 
 // stubSender is a minimal EventSender used by factory stubs.
