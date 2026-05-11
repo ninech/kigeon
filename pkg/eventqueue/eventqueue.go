@@ -5,6 +5,7 @@ package eventqueue
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -165,6 +166,11 @@ type EventAcknowledger interface {
 	Ack() error
 }
 
+// ErrNoMessage is returned by Fetch when the queue had no message available
+// before the fetch timed out. Callers should treat this as a normal idle
+// condition and retry.
+var ErrNoMessage = errors.New("no message available")
+
 // Fetch fetches a single message from the event queue.
 func (ef *EventFetcher) Fetch(ctx context.Context) (*corev1.Event, EventAcknowledger, error) {
 	messageBatch, err := ef.consumer.Fetch(1, jetstream.FetchContext(ctx))
@@ -177,7 +183,13 @@ func (ef *EventFetcher) Fetch(ctx context.Context) (*corev1.Event, EventAcknowle
 		return nil, nil, fmt.Errorf("error during message fetching: %w", messageBatch.Error())
 	}
 	if message == nil {
-		return nil, nil, fmt.Errorf("no message received: %w", ctx.Err())
+		if ctx.Err() != nil {
+			return nil, nil, ctx.Err()
+		}
+		// it might be that the NATs server send a `nil` message
+		// to inform that no new events appeared. We handle this
+		// with a specific error.
+		return nil, nil, ErrNoMessage
 	}
 	event := &corev1.Event{}
 	if err := json.Unmarshal(message.Data(), event); err != nil {

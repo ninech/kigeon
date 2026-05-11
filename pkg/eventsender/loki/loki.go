@@ -128,6 +128,14 @@ func (s *Sender) Stop() {
 func (s *Sender) processEvent(ctx context.Context) error {
 	event, ack, err := s.eventFetcher.Fetch(ctx)
 	if err != nil {
+		if errors.Is(err, eventqueue.ErrNoMessage) {
+			s.logger.Debug("no events in queue", slog.String("name", s.name))
+			return nil
+		}
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			s.logger.Debug("fetch stopped", slog.String("name", s.name), slog.String("reason", err.Error()))
+			return nil
+		}
 		return fmt.Errorf("failed to fetch event: %w", err)
 	}
 
