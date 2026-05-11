@@ -28,6 +28,9 @@ type Config struct {
 	// StreamLabels configure the stream labels to use when sending the
 	// Kubernetes events to Loki. These labels are added to all log entries.
 	StreamLabels map[string]string `json:"streamLabels,omitempty"`
+	// Message overrides the log line content for this event. When empty the
+	// default JSON-formatted event message is used.
+	Message string `json:"message,omitempty"`
 	// BatchWait is the maximum time to wait before sending a batch of logs.
 	// Defaults to 1 second if not set.
 	BatchWait time.Duration `json:"batchWait,omitempty"`

@@ -261,7 +261,10 @@ type lokiStream struct {
 func (s *Sender) buildPushPayload(event *corev1.Event, cfg Config) lokiPushPayload {
 	labels := s.buildLabels(event, cfg)
 	timestamp := s.getEventTimestamp(event)
-	message := s.formatEventMessage(event)
+	message := cfg.Message
+	if message == "" {
+		message = s.formatEventMessage(event)
+	}
 
 	return lokiPushPayload{
 		Streams: []lokiStream{

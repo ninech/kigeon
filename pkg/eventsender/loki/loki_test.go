@@ -325,29 +325,30 @@ func TestSender_formatEventMessage(t *testing.T) {
 
 func TestSender_buildPushPayload(t *testing.T) {
 	sender := &Sender{}
-	cfg := Config{
-		StreamLabels: map[string]string{
-			"app": "kigeon",
-		},
-	}
 
-	event := createTestEvent()
-	payload := sender.buildPushPayload(event, cfg)
+	t.Run("uses formatted event message by default", func(t *testing.T) {
+		cfg := Config{StreamLabels: map[string]string{"app": "kigeon"}}
+		event := createTestEvent()
+		payload := sender.buildPushPayload(event, cfg)
 
-	require.Len(t, payload.Streams, 1)
-	stream := payload.Streams[0]
+		require.Len(t, payload.Streams, 1)
+		stream := payload.Streams[0]
+		assert.Equal(t, "kigeon", stream.Stream["app"])
+		assert.Equal(t, "default", stream.Stream["namespace"])
+		require.Len(t, stream.Values, 1)
+		require.Len(t, stream.Values[0], 2)
+		assert.NotEmpty(t, stream.Values[0][0])
+		assert.Contains(t, stream.Values[0][1], "test-event")
+	})
 
-	// Check labels
-	assert.Equal(t, "kigeon", stream.Stream["app"])
-	assert.Equal(t, "default", stream.Stream["namespace"])
+	t.Run("uses config message override when set", func(t *testing.T) {
+		cfg := Config{Message: "pulled container image"}
+		event := createTestEvent()
+		payload := sender.buildPushPayload(event, cfg)
 
-	// Check values (timestamp and message)
-	require.Len(t, stream.Values, 1)
-	require.Len(t, stream.Values[0], 2)
-	// First element is timestamp as string
-	assert.NotEmpty(t, stream.Values[0][0])
-	// Second element is the JSON message
-	assert.Contains(t, stream.Values[0][1], "test-event")
+		require.Len(t, payload.Streams[0].Values, 1)
+		assert.Equal(t, "pulled container image", payload.Streams[0].Values[0][1])
+	})
 }
 
 // mockAck implements eventqueue.EventAcknowledger for testing.
