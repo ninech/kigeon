@@ -35,6 +35,7 @@ type Sender struct {
 	logger       *slog.Logger
 	cancel       context.CancelFunc
 	hook         *hookExecutor
+	noop         bool
 }
 
 // SenderOptions allows to configure the Sender.
@@ -42,6 +43,7 @@ type SenderOptions struct {
 	Logger     *slog.Logger
 	HTTPClient *http.Client
 	KubeClient kubernetes.Interface
+	Noop       bool
 }
 
 // NewSender creates a new Loki sender.
@@ -89,6 +91,7 @@ func NewSender(name string, config Config, eventFetcher *eventqueue.EventFetcher
 		httpClient:   httpClient,
 		logger:       logger,
 		hook:         hook,
+		noop:         options.Noop,
 	}, nil
 }
 
@@ -154,6 +157,15 @@ func (s *Sender) processEvent(ctx context.Context) error {
 			return s.handleHookError(ctx, err, event, ack)
 		}
 		effectiveConfig = hooked
+	}
+
+	if s.noop {
+		eventJSON, err := json.Marshal(event)
+		if err != nil {
+			s.logger.Warn("noop: failed to marshal event", slog.String("error", err.Error()))
+		}
+		s.logger.Info("noop: would send event to loki", slog.String("event", string(eventJSON)))
+		return ack.Ack()
 	}
 
 	if err := s.sendToLoki(ctx, event, effectiveConfig); err != nil {

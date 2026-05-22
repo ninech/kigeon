@@ -123,6 +123,22 @@ eventsenders:
 			},
 		},
 		{
+			name: "noop sender",
+			yaml: `
+eventsenders:
+  - name: loki-noop
+    type: loki
+    noop: true
+    config:
+      url: http://loki:3100
+`,
+			validate: func(t *testing.T, cfg *Config) {
+				t.Helper()
+				require.Len(t, cfg.EventSenders, 1)
+				assert.True(t, cfg.EventSenders[0].Noop)
+			},
+		},
+		{
 			name:        "invalid yaml",
 			yaml:        `invalid: [yaml`,
 			expectError: true,

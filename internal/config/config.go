@@ -52,6 +52,8 @@ type EventSenderConfig struct {
 	Name string `json:"name"`
 	// Type is the sender type (e.g., "loki").
 	Type string `json:"type"`
+	// Noop enables dry-run mode: events are logged but not actually sent.
+	Noop bool `json:"noop,omitempty"`
 	// Filter contains optional namespace filtering configuration.
 	Filter *FilterConfig `json:"filter,omitempty"`
 	// Config contains sender-specific configuration as raw JSON.

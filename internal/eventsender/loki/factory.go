@@ -25,6 +25,7 @@ func Factory(name string, rawConfig json.RawMessage, fetcher *eventqueue.EventFe
 	return NewSender(name, config, fetcher, SenderOptions{
 		Logger:     opts.Logger,
 		KubeClient: opts.KubeClient,
+		Noop:       opts.Noop,
 	})
 }
 
