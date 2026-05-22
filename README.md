@@ -32,6 +32,25 @@ events that have already been delivered.
 
 ## Installation
 
+### Helm
+
+```bash
+helm repo add kigeon https://ninech.github.io/kigeon
+helm repo update
+
+# Example installation with a Loki sender and persistent storage:
+helm install kigeon kigeon/kigeon \
+  --namespace kigeon --create-namespace \
+  --set persistence.enabled=true \
+  --set config.eventsenders[0].name=loki \
+  --set config.eventsenders[0].type=loki \
+  --set config.eventsenders[0].config.url=http://loki:3100
+```
+
+For a full list of configuration options see [`deploy/helm/kigeon/values.yaml`](deploy/helm/kigeon/values.yaml).
+
+### Container image
+
 Container images are published to `ghcr.io/ninech/kigeon` for each release.
 See the [releases page](https://github.com/ninech/kigeon/releases) for available versions.
 
