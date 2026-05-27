@@ -17,6 +17,8 @@ type FactoryOptions struct {
 	Logger     *slog.Logger
 	Filter     *filter.DynamicNamespaceFilter
 	KubeClient kubernetes.Interface
+	// Noop enables dry-run mode: events are logged but not actually sent.
+	Noop bool
 }
 
 // SenderFactory is a function that creates an EventSender from configuration.

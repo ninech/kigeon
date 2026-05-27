@@ -174,6 +174,7 @@ func run() error {
 				Logger:     senderLogger,
 				Filter:     nsFilter,
 				KubeClient: k8sClient,
+				Noop:       senderCfg.Noop,
 			},
 		)
 		if err != nil {

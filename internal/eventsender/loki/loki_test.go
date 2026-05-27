@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
@@ -485,6 +486,52 @@ func TestSender_handleHookError(t *testing.T) {
 		assert.Contains(t, err.Error(), "nats is down")
 		assert.True(t, ack.called, "Ack should have been called")
 	})
+}
+
+func TestNewSender_noopOption(t *testing.T) {
+	t.Parallel()
+	sender, err := NewSender("test", Config{URL: "http://localhost:3100"}, &eventqueue.EventFetcher{}, SenderOptions{Noop: true})
+	require.NoError(t, err)
+	assert.True(t, sender.noop)
+}
+
+func TestSender_processEvent_noop(t *testing.T) {
+	t.Parallel()
+
+	requestMade := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requestMade = true
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	t.Cleanup(server.Close)
+
+	dataDir := t.TempDir()
+	eq, err := eventqueue.StartEventQueue(t.Context(), dataDir, eventqueue.Options{
+		EventsMaxAge:   time.Hour,
+		EventsMaxBytes: resource.MustParse("100Mi"),
+	})
+	require.NoError(t, err)
+	t.Cleanup(eq.Stop)
+
+	fetcher, err := eq.Subscribe(t.Context(), "test-noop")
+	require.NoError(t, err)
+
+	require.NoError(t, eq.PublishEvent(t.Context(), createTestEvent()))
+
+	sender := &Sender{
+		name:         "test-noop",
+		config:       Config{URL: server.URL},
+		eventFetcher: fetcher,
+		httpClient:   server.Client(),
+		logger:       testLogger(),
+		noop:         true,
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	require.NoError(t, sender.processEvent(ctx))
+	assert.False(t, requestMade, "noop sender must not make HTTP requests")
 }
 
 func createTestEvent() *corev1.Event {
