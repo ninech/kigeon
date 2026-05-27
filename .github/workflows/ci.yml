@@ -31,3 +31,13 @@ jobs:
       - uses: golangci/golangci-lint-action@v9
         with:
           version: v2.11.2
+
+  helm-lint:
+    name: Helm Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: azure/setup-helm@v4
+
+      - run: helm lint deploy/helm/kigeon

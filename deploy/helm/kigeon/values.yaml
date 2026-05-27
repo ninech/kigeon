@@ -1,0 +1,78 @@
+image:
+  repository: ghcr.io/ninech/kigeon
+  pullPolicy: IfNotPresent
+  # Defaults to Chart.appVersion when empty.
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  # Defaults to the fullname when empty.
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  fsGroup: 65534
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+resources: {}
+
+# Persistent storage for the embedded NATS data directory.
+# When disabled, an emptyDir is used and all NATS state is lost on pod restart.
+# This includes the deduplication KV store, so kigeon may re-send events that
+# were already forwarded before the restart. Enable persistence for production use.
+persistence:
+  enabled: false
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 1Gi
+  # Use an existing PVC instead of creating one.
+  existingClaim: ""
+
+extraEnv: []
+# extraEnv:
+#   - name: LOKI_PASSWORD
+#     valueFrom:
+#       secretKeyRef:
+#         name: loki-credentials
+#         key: password
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Full kigeon configuration. Rendered verbatim into a ConfigMap.
+# See https://github.com/ninech/kigeon for all available options.
+config:
+  global:
+    dataDir: /var/lib/kigeon/data
+    logLevel: info
+    logFormat: json
+  queue:
+    eventsMaxAge: 24h
+    eventsMaxBytes: "500Mi"
+    kubernetesEventsMaxLifetime: 1h
+  pusher:
+    pushTimeout: 5s
+  eventsenders: []
+  # Example sender:
+  # eventsenders:
+  #   - name: loki
+  #     type: loki
+  #     # noop: true   # log events instead of sending, useful for testing hooks
+  #     config:
+  #       url: http://loki.monitoring.svc:3100
