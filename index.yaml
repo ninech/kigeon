@@ -1,0 +1,14 @@
+apiVersion: v1
+entries:
+  kigeon:
+  - apiVersion: v2
+    appVersion: 0.0.4
+    created: "2026-05-27T12:39:53.03272666Z"
+    description: Sends Kubernetes events to configurable receivers.
+    digest: 6b0dbf7ad10a2ad9aa5cd1ab15cb1b9f226f173fcc22f67180d209488882956a
+    name: kigeon
+    type: application
+    urls:
+    - https://github.com/ninech/kigeon/releases/download/kigeon-0.1.0/kigeon-0.1.0.tgz
+    version: 0.1.0
+generated: "2026-05-27T12:39:53.03273726Z"
