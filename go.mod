@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/nats-io/nats-server/v2 v2.14.1
-	github.com/nats-io/nats.go v1.52.0
+	github.com/nats-io/nats.go v1.53.1
 	github.com/stretchr/testify v1.11.1
 	go.starlark.net v0.0.0-20260210143700-b62fd896b91b
 	k8s.io/api v0.36.1
