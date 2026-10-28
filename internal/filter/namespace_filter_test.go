@@ -398,3 +398,25 @@ func TestDynamicNamespaceFilter_Stop(t *testing.T) {
 	// Stop should not panic and should complete
 	dnf.Stop()
 }
+
+func TestDynamicNamespaceFilter_StopWhileStartContextIsAlive(t *testing.T) {
+	t.Parallel()
+	selector, err := labels.Parse("env=production")
+	require.NoError(t, err)
+
+	dnf := filter.NewDynamicNamespaceFilter(fake.NewClientset(), filter.DynamicNamespaceFilterConfig{
+		LabelSelector: selector,
+	})
+	require.NoError(t, dnf.Start(t.Context()))
+
+	stopped := make(chan struct{})
+	go func() {
+		dnf.Stop()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Stop did not return while the context passed to Start is still alive")
+	}
+}

@@ -113,14 +113,7 @@ func NewDynamicNamespaceFilter(c kubernetes.Interface, cfg DynamicNamespaceFilte
 			dnf.logger.Debug("got update on namespace from API", slog.String("name", ns.Name))
 			dnf.handleNamespaceChange(ns)
 		},
-		DeleteFunc: func(obj interface{}) {
-			ns, is := obj.(*corev1.Namespace)
-			if !is {
-				return
-			}
-			dnf.logger.Debug("got namespace deletion event from API", slog.String("name", ns.Name))
-			dnf.removeNamespace(ns.Name)
-		},
+		DeleteFunc: dnf.handleNamespaceDelete,
 	}); err != nil {
 		dnf.logger.Error("failed to register namespace event handler", slog.Any("error", err))
 	}
@@ -129,14 +122,15 @@ func NewDynamicNamespaceFilter(c kubernetes.Interface, cfg DynamicNamespaceFilte
 }
 
 // Start starts the dynamic namespace filter. It returns an error if the
-// namespace cache cannot be synced within the given context.
+// namespace cache cannot be synced within the given context. The filter keeps
+// watching namespaces until Stop is called.
 func (dnf *DynamicNamespaceFilter) Start(syncCtx context.Context) error {
 	// increment the wait group immediately to prevent a race condition
 	// with an immediate called `Stop()`.
 	dnf.wg.Add(1)
 	go func() {
 		defer dnf.wg.Done()
-		dnf.informer.Run(syncCtx.Done())
+		dnf.informer.Run(dnf.ctx.Done())
 	}()
 
 	dnf.logger.Debug("started watching for namespaces matching selector", slog.String("selector", dnf.config.LabelSelector.String()))
@@ -156,6 +150,21 @@ func (dnf *DynamicNamespaceFilter) handleNamespaceChange(ns *corev1.Namespace) {
 	// need to remove it
 	dnf.removeNamespace(ns.Name)
 }
+
+// handleNamespaceDelete removes a deleted namespace. If the deletion was
+// missed, the informer passes a tombstone instead of the namespace.
+func (dnf *DynamicNamespaceFilter) handleNamespaceDelete(obj any) {
+	if tombstone, ok := obj.(cache.DeletedFinalStateUnknown); ok {
+		obj = tombstone.Obj
+	}
+	ns, is := obj.(*corev1.Namespace)
+	if !is {
+		return
+	}
+	dnf.logger.Debug("got namespace deletion event from API", slog.String("name", ns.Name))
+	dnf.removeNamespace(ns.Name)
+}
+
 func (dnf *DynamicNamespaceFilter) addNamespace(name string) {
 	dnf.mu.Lock()
 	defer dnf.mu.Unlock()
