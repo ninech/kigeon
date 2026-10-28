@@ -138,6 +138,12 @@ func (ep *EventPusher) enqueue(event *v1.Event) {
 	}
 }
 
+// Push queues an event which was not observed by the event informer, like a
+// synthetic event. It must not be called after Stop.
+func (ep *EventPusher) Push(event *v1.Event) {
+	ep.enqueue(event)
+}
+
 // Run starts the informer and the event publishing loop. It should be started
 // in a go-routine.
 func (ep *EventPusher) Run() {

@@ -17,6 +17,7 @@ import (
 	"github.com/ninech/kigeon/internal/eventqueue"
 	"github.com/ninech/kigeon/internal/eventsender"
 	"github.com/ninech/kigeon/internal/filter"
+	"github.com/ninech/kigeon/internal/pods"
 
 	// import sender packages to register them
 	_ "github.com/ninech/kigeon/internal/eventsender/loki"
@@ -100,6 +101,16 @@ func run() error {
 	}
 	logger.Info("event queue started")
 
+	// The pod informer is only started if senders or OOM killed events
+	// require it.
+	podInformer := pods.NewInformer(k8sClient, pods.Options{
+		Logger:              logger.With(slog.String("component", "pods")),
+		DeletedPodRetention: cfg.Pods.DeletedPodRetention.Duration,
+	})
+	if cfg.Pods.OOMKilledEvents {
+		podInformer.Enable()
+	}
+
 	// Track components for shutdown
 	var wg sync.WaitGroup
 	var senders []eventsender.EventSender
@@ -156,10 +167,10 @@ func run() error {
 			senderCfg.Config,
 			fetcher,
 			eventsender.FactoryOptions{
-				Logger:     senderLogger,
-				Filter:     nsFilter,
-				KubeClient: k8sClient,
-				Noop:       senderCfg.Noop,
+				Logger: senderLogger,
+				Filter: nsFilter,
+				Pods:   podInformer,
+				Noop:   senderCfg.Noop,
 			},
 		)
 		if err != nil {
@@ -185,6 +196,16 @@ func run() error {
 		return fmt.Errorf("failed to prune stale senders: %w", err)
 	}
 
+	if podInformer.Enabled() {
+		syncCtx, syncCancel := context.WithTimeout(ctx, 30*time.Second)
+		err := podInformer.Start(syncCtx)
+		syncCancel()
+		if err != nil {
+			return fmt.Errorf("failed to start pod informer: %w", err)
+		}
+		logger.Info("pod informer started")
+	}
+
 	// Start EventPusher
 	pushTimeout := cfg.Pusher.PushTimeout.Duration
 	ep := eventpusher.NewEventPusher(ctx, eq, k8sClient, eventpusher.Options{
@@ -203,6 +224,15 @@ func run() error {
 		return fmt.Errorf("event pusher failed to start: %w", err)
 	}
 	logger.Info("event pusher started")
+
+	if cfg.Pods.OOMKilledEvents {
+		// Only OOM kills within the deduplication window are reported, as
+		// older ones might have been sent already.
+		if err := podInformer.OnOOMKilled(kubernetesEventsMaxLifetime, ep.Push); err != nil {
+			return fmt.Errorf("failed to watch for OOM killed containers: %w", err)
+		}
+		logger.Info("watching for OOM killed containers")
+	}
 
 	logger.Info("kigeon started successfully", slog.Int("senders", len(senders)))
 
@@ -223,6 +253,10 @@ func run() error {
 	for _, f := range filters {
 		f.Stop()
 	}
+
+	// Stop the pod informer before the event pusher, as it pushes OOM
+	// killed events
+	podInformer.Stop()
 
 	// Stop event pusher
 	ep.Stop()

@@ -22,11 +22,15 @@ func Factory(name string, rawConfig json.RawMessage, fetcher *eventqueue.EventFe
 		return nil, fmt.Errorf("failed to parse loki config: %w", err)
 	}
 
-	return NewSender(name, config, fetcher, SenderOptions{
-		Logger:     opts.Logger,
-		KubeClient: opts.KubeClient,
-		Noop:       opts.Noop,
-	})
+	senderOptions := SenderOptions{
+		Logger: opts.Logger,
+		Noop:   opts.Noop,
+	}
+	if config.Hook != nil && config.Hook.EnrichPod && opts.Pods != nil {
+		opts.Pods.Enable()
+		senderOptions.Pods = opts.Pods
+	}
+	return NewSender(name, config, fetcher, senderOptions)
 }
 
 // parseConfig unmarshals raw JSON config into a typed Loki Config struct,

@@ -255,3 +255,33 @@ func newEvent(name string) *corev1.Event {
 		Type:    corev1.EventTypeNormal,
 	}
 }
+
+func TestEventPusher_Push(t *testing.T) {
+	t.Parallel()
+	is := require.New(t)
+
+	mockQueue := &fakeEventQueue{}
+	mockQueue.publishWait.Add(1)
+	pusher := eventpusher.NewEventPusher(t.Context(), mockQueue, fake.NewClientset(), eventpusher.Options{
+		ResyncInterval: ptr.To(time.Duration(0)),
+	})
+	go pusher.Run()
+	is.NoError(pusher.WaitForStart(5 * time.Second))
+	defer pusher.Stop()
+
+	pusher.Push(newEvent("synthetic"))
+
+	waitCh := make(chan struct{})
+	go func() {
+		mockQueue.publishWait.Wait()
+		close(waitCh)
+	}()
+	select {
+	case <-waitCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("ran into timeout while waiting for the pushed event to be published")
+	}
+	events := mockQueue.getEvents()
+	is.Len(events, 1)
+	is.Equal("synthetic", events[0].Name)
+}

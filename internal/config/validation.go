@@ -39,6 +39,13 @@ func (c *Config) Validate() error {
 	// Validate queue config
 	errors = append(errors, validateQueue(&c.Queue)...)
 
+	if c.Pods.DeletedPodRetention.Duration < 0 {
+		errors = append(errors, ValidationError{
+			Field:   "pods.deletedPodRetention",
+			Message: "deleted pod retention cannot be negative",
+		})
+	}
+
 	// Validate eventsenders
 	errors = append(errors, validateEventSenders(c.EventSenders)...)
 

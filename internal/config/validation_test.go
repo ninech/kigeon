@@ -152,6 +152,21 @@ func TestConfig_Validate(t *testing.T) {
 			expectedErrors: []string{"queue.eventsMaxBytes"},
 		},
 		{
+			name: "negative deleted pod retention",
+			config: Config{
+				Global: GlobalConfig{
+					DataDir: "/data",
+				},
+				Pods: PodsConfig{
+					DeletedPodRetention: metav1.Duration{Duration: -1 * time.Minute},
+				},
+				EventSenders: []EventSenderConfig{
+					{Name: "test", Type: "loki"},
+				},
+			},
+			expectedErrors: []string{"pods.deletedPodRetention"},
+		},
+		{
 			name: "negative filter hard refresh interval",
 			config: Config{
 				Global: GlobalConfig{
