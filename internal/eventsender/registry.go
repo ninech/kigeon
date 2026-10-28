@@ -6,17 +6,18 @@ import (
 	"log/slog"
 	"sync"
 
-	"k8s.io/client-go/kubernetes"
-
 	"github.com/ninech/kigeon/internal/eventqueue"
 	"github.com/ninech/kigeon/internal/filter"
+	"github.com/ninech/kigeon/internal/pods"
 )
 
 // FactoryOptions provides common options for creating event senders.
 type FactoryOptions struct {
-	Logger     *slog.Logger
-	Filter     *filter.DynamicNamespaceFilter
-	KubeClient kubernetes.Interface
+	Logger *slog.Logger
+	Filter *filter.DynamicNamespaceFilter
+	// Pods provides pods for senders. Senders which need it have to
+	// enable it.
+	Pods *pods.Informer
 	// Noop enables dry-run mode: events are logged but not actually sent.
 	Noop bool
 }

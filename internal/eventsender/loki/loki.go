@@ -15,7 +15,6 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/kubernetes"
 
 	"github.com/ninech/kigeon/internal/eventqueue"
 )
@@ -42,8 +41,9 @@ type Sender struct {
 type SenderOptions struct {
 	Logger     *slog.Logger
 	HTTPClient *http.Client
-	KubeClient kubernetes.Interface
-	Noop       bool
+	// Pods is used for pod enrichment in hooks.
+	Pods PodGetter
+	Noop bool
 }
 
 // NewSender creates a new Loki sender.
@@ -78,7 +78,7 @@ func NewSender(name string, config Config, eventFetcher *eventqueue.EventFetcher
 	var hook *hookExecutor
 	if config.Hook != nil {
 		var err error
-		hook, err = newHookExecutor(*config.Hook, logger, options.KubeClient)
+		hook, err = newHookExecutor(*config.Hook, logger, options.Pods)
 		if err != nil {
 			return nil, fmt.Errorf("initializing config hook: %w", err)
 		}

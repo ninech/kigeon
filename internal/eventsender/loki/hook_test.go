@@ -15,6 +15,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
+
+	"github.com/ninech/kigeon/internal/pods"
 )
 
 func writeStarScript(t *testing.T, content string) string {
@@ -246,7 +248,7 @@ def transform(config, event):
 				Labels:    map[string]string{"team": "platform", "env": "prod"},
 			},
 		}
-		kubeClient := fake.NewClientset(pod)
+		podGetter := pods.NewInformer(fake.NewClientset(pod), pods.Options{})
 
 		path := writeStarScript(t, `
 def transform(config, event):
@@ -255,7 +257,7 @@ def transform(config, event):
         config["tenantID"] = "platform"
     return config
 `)
-		h, err := newHookExecutor(ConfigHook{Script: path, EnrichPod: true}, testLogger(), kubeClient)
+		h, err := newHookExecutor(ConfigHook{Script: path, EnrichPod: true}, testLogger(), podGetter)
 		require.NoError(t, err)
 
 		podEvent := &corev1.Event{
@@ -273,7 +275,7 @@ def transform(config, event):
 
 	t.Run("hook does not set podLabels for non-pod events", func(t *testing.T) {
 		t.Parallel()
-		kubeClient := fake.NewClientset()
+		podGetter := pods.NewInformer(fake.NewClientset(), pods.Options{})
 
 		path := writeStarScript(t, `
 def transform(config, event):
@@ -281,7 +283,7 @@ def transform(config, event):
         config["tenantID"] = "unexpected"
     return config
 `)
-		h, err := newHookExecutor(ConfigHook{Script: path, EnrichPod: true}, testLogger(), kubeClient)
+		h, err := newHookExecutor(ConfigHook{Script: path, EnrichPod: true}, testLogger(), podGetter)
 		require.NoError(t, err)
 
 		deployEvent := &corev1.Event{
@@ -299,13 +301,13 @@ def transform(config, event):
 
 	t.Run("skipOnPodNotFound skips event when pod is missing", func(t *testing.T) {
 		t.Parallel()
-		kubeClient := fake.NewClientset() // no pods registered
+		podGetter := pods.NewInformer(fake.NewClientset(), pods.Options{}) // no pods registered
 
 		path := writeStarScript(t, `
 def transform(config, event):
     return config
 `)
-		h, err := newHookExecutor(ConfigHook{Script: path, EnrichPod: true, SkipOnPodNotFound: true}, testLogger(), kubeClient)
+		h, err := newHookExecutor(ConfigHook{Script: path, EnrichPod: true, SkipOnPodNotFound: true}, testLogger(), podGetter)
 		require.NoError(t, err)
 
 		podEvent := &corev1.Event{
@@ -322,13 +324,13 @@ def transform(config, event):
 
 	t.Run("skipOnPodNotFound unset: calls hook when pod is missing", func(t *testing.T) {
 		t.Parallel()
-		kubeClient := fake.NewClientset()
+		podGetter := pods.NewInformer(fake.NewClientset(), pods.Options{})
 
 		path := writeStarScript(t, `
 def transform(config, event):
     return config
 `)
-		h, err := newHookExecutor(ConfigHook{Script: path, EnrichPod: true, SkipOnPodNotFound: false}, testLogger(), kubeClient)
+		h, err := newHookExecutor(ConfigHook{Script: path, EnrichPod: true, SkipOnPodNotFound: false}, testLogger(), podGetter)
 		require.NoError(t, err)
 
 		podEvent := &corev1.Event{
@@ -339,45 +341,6 @@ def transform(config, event):
 				Namespace: "default",
 			},
 		}
-		_, err = h.execute(context.Background(), baseConfig, podEvent)
-		require.NoError(t, err)
-	})
-
-	t.Run("pod labels are served from cache on second call", func(t *testing.T) {
-		t.Parallel()
-		pod := &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "cached-pod",
-				Namespace: "default",
-				Labels:    map[string]string{"cached": "true"},
-			},
-		}
-		kubeClient := fake.NewClientset(pod)
-
-		path := writeStarScript(t, `
-def transform(config, event):
-    return config
-`)
-		h, err := newHookExecutor(ConfigHook{Script: path, EnrichPod: true}, testLogger(), kubeClient)
-		require.NoError(t, err)
-
-		podEvent := &corev1.Event{
-			ObjectMeta: metav1.ObjectMeta{Name: "ev", Namespace: "default"},
-			InvolvedObject: corev1.ObjectReference{
-				Kind:      "Pod",
-				Name:      "cached-pod",
-				Namespace: "default",
-			},
-		}
-
-		// First call — populates cache.
-		_, err = h.execute(context.Background(), baseConfig, podEvent)
-		require.NoError(t, err)
-
-		// Delete the pod from the fake client; second call must still succeed via cache.
-		err = kubeClient.CoreV1().Pods("default").Delete(context.Background(), "cached-pod", metav1.DeleteOptions{})
-		require.NoError(t, err)
-
 		_, err = h.execute(context.Background(), baseConfig, podEvent)
 		require.NoError(t, err)
 	})

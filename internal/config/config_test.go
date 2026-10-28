@@ -192,3 +192,35 @@ eventsenders:
 		assert.Contains(t, err.Error(), "failed to read config file")
 	})
 }
+
+func TestParse_Pods(t *testing.T) {
+	t.Parallel()
+	tests := map[string]struct {
+		yaml                    string
+		wantOOMKilledEvents     bool
+		wantDeletedPodRetention time.Duration
+	}{
+		"defaults": {
+			yaml:                    "eventsenders: []",
+			wantDeletedPodRetention: 5 * time.Minute,
+		},
+		"configured": {
+			yaml: `
+pods:
+  oomKilledEvents: true
+  deletedPodRetention: 10m
+`,
+			wantOOMKilledEvents:     true,
+			wantDeletedPodRetention: 10 * time.Minute,
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			cfg, err := Parse([]byte(tc.yaml))
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantOOMKilledEvents, cfg.Pods.OOMKilledEvents)
+			assert.Equal(t, tc.wantDeletedPodRetention, cfg.Pods.DeletedPodRetention.Duration)
+		})
+	}
+}

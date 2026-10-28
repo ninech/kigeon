@@ -90,6 +90,14 @@ pusher:
   # Timeout for pushing a single event into the queue. Default: 5s
   pushTimeout: 5s
 
+pods:
+  # Emit synthetic "OOMKilled" events for containers which were killed due to
+  # running out of memory. Default: false
+  oomKilledEvents: false
+
+  # How long deleted pods remain available for pod enrichment. Default: 5m
+  deletedPodRetention: 5m
+
 eventsenders:
   - name: my-loki
     type: loki
@@ -195,13 +203,15 @@ def transform(config, event):
 
 ### Pod enrichment
 
-When `enrichPod: true` is set and the involved object is a Pod, kigeon fetches
-the full Pod definition from the Kubernetes API and makes it available as `pod`
-on the event dict. Pod definitions are cached for 30 seconds.
+When `enrichPod: true` is set and the involved object is a Pod, kigeon makes the
+full Pod definition available as `pod` on the event dict. Pods are served from
+a cluster-wide pod informer, which is only started if a sender enables pod
+enrichment or `pods.oomKilledEvents` is set.
 
-Since Kubernetes keeps terminated pods in the API for ~2 minutes before garbage
-collection, a warm cache from any prior event on the same pod is usually
-sufficient to cover events like OOMKilling.
+Deleted pods remain available for `pods.deletedPodRetention`, as events are
+often processed after the pod they refer to was deleted (e.g. short-lived job
+pods or when catching up after a restart). Pods which the informer did not
+observe yet are fetched from the Kubernetes API.
 
 Always guard against the pod being unavailable:
 
@@ -221,6 +231,25 @@ See [`examples/hooks/`](examples/hooks/) for ready-to-use scripts:
 | [`route-by-namespace.star`](examples/hooks/route-by-namespace.star) | Route events to different Loki tenants based on namespace |
 | [`add-pod-labels-as-stream-labels.star`](examples/hooks/add-pod-labels-as-stream-labels.star) | Forward selected pod labels as Loki stream labels |
 | [`route-oom-events.star`](examples/hooks/route-oom-events.star) | Send OOMKilling events to a dedicated Loki tenant |
+
+## OOM killed containers
+
+Kubernetes does not emit an event when a container gets killed due to running
+out of memory. The kernel OOM kill is only reported as an `OOMKilling` event on
+the Node, which can not be attributed to a pod or namespace.
+
+With `pods.oomKilledEvents: true`, kigeon watches the container statuses of all
+pods and emits a synthetic Warning event with reason `OOMKilled` for the pod
+(source component `kigeon`), for example:
+
+```
+Container app was killed because it ran out of memory (memory limit 512Mi)
+```
+
+These events are queued like any other event, so namespace filters, hooks and
+pod enrichment apply to them as well. OOM kills which happened more than
+`queue.kubernetesEventsMaxLifetime` ago (e.g. while kigeon was not running)
+are not reported, as they might have been sent already.
 
 ## Running
 

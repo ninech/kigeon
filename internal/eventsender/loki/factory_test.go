@@ -6,6 +6,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"k8s.io/client-go/kubernetes/fake"
+
+	"github.com/ninech/kigeon/internal/eventqueue"
+	"github.com/ninech/kigeon/internal/eventsender"
+	"github.com/ninech/kigeon/internal/pods"
 )
 
 func TestParseConfig(t *testing.T) {
@@ -137,6 +142,38 @@ func TestParseConfig(t *testing.T) {
 			if tt.validate != nil {
 				tt.validate(t, cfg)
 			}
+		})
+	}
+}
+
+func TestFactory_EnablesPodInformer(t *testing.T) {
+	t.Parallel()
+	script := writeStarScript(t, `
+def transform(config, event):
+    return config
+`)
+	tests := map[string]struct {
+		rawConfig   string
+		wantEnabled bool
+	}{
+		"without hook": {
+			rawConfig: `{"url":"http://loki:3100"}`,
+		},
+		"hook without pod enrichment": {
+			rawConfig: `{"url":"http://loki:3100","hook":{"script":"` + script + `"}}`,
+		},
+		"hook with pod enrichment": {
+			rawConfig:   `{"url":"http://loki:3100","hook":{"script":"` + script + `","enrichPod":true}}`,
+			wantEnabled: true,
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			informer := pods.NewInformer(fake.NewClientset(), pods.Options{})
+			_, err := Factory("test", json.RawMessage(tc.rawConfig), &eventqueue.EventFetcher{}, eventsender.FactoryOptions{Pods: informer})
+			require.NoError(t, err)
+			assert.Equal(t, tc.wantEnabled, informer.Enabled())
 		})
 	}
 }

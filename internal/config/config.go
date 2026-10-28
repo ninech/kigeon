@@ -17,6 +17,7 @@ type Config struct {
 	Global       GlobalConfig        `json:"global"`
 	Queue        QueueConfig         `json:"queue"`
 	Pusher       PusherConfig        `json:"pusher"`
+	Pods         PodsConfig          `json:"pods"`
 	EventSenders []EventSenderConfig `json:"eventsenders"`
 }
 
@@ -44,6 +45,17 @@ type QueueConfig struct {
 type PusherConfig struct {
 	// PushTimeout is the maximum time to wait for pushing an event to the queue.
 	PushTimeout metav1.Duration `json:"pushTimeout"`
+}
+
+// PodsConfig contains settings for watching pods.
+type PodsConfig struct {
+	// OOMKilledEvents enables synthetic "OOMKilled" events for containers
+	// which were killed due to running out of memory. Kubernetes only
+	// reports these as node events, which can not be attributed to pods.
+	OOMKilledEvents bool `json:"oomKilledEvents"`
+	// DeletedPodRetention defines how long deleted pods remain available
+	// for pod enrichment.
+	DeletedPodRetention metav1.Duration `json:"deletedPodRetention"`
 }
 
 // EventSenderConfig contains configuration for a single event sender.
@@ -118,6 +130,10 @@ func applyDefaults(config *Config) {
 	}
 	if config.Queue.KubernetesEventsMaxLifetime.Duration == 0 {
 		config.Queue.KubernetesEventsMaxLifetime = metav1.Duration{Duration: 1 * time.Hour}
+	}
+
+	if config.Pods.DeletedPodRetention.Duration == 0 {
+		config.Pods.DeletedPodRetention = metav1.Duration{Duration: 5 * time.Minute}
 	}
 
 	if config.Pusher.PushTimeout.Duration == 0 {

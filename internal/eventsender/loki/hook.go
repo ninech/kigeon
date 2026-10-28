@@ -6,20 +6,16 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 )
 
 const (
 	defaultHookTimeout = 100 * time.Millisecond
-	podCacheTTL        = 30 * time.Second
 )
 
 // errSkip is returned by execute when the event should be acknowledged
@@ -36,51 +32,21 @@ var errPodNotFound = errors.New("pod not found")
 // per event. The script file is loaded and compiled once at construction;
 // the compiled function is reused (it is safe to share across goroutines).
 type hookExecutor struct {
-	fn         *starlark.Function
-	hook       ConfigHook
-	logger     *slog.Logger
-	kubeClient kubernetes.Interface
-	podCache   *podCache
+	fn     *starlark.Function
+	hook   ConfigHook
+	logger *slog.Logger
+	pods   PodGetter
 }
 
-// podCache is a short-lived cache for pod lookups to avoid hammering the
-// Kubernetes API for repeated events on the same pod.
-type podCache struct {
-	mu      sync.Mutex
-	entries map[string]podCacheEntry
-}
-
-type podCacheEntry struct {
-	pod       *corev1.Pod
-	expiresAt time.Time
-}
-
-func newPodCache() *podCache {
-	return &podCache{entries: make(map[string]podCacheEntry)}
-}
-
-func (c *podCache) get(namespace, name string) (*corev1.Pod, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	entry, ok := c.entries[namespace+"/"+name]
-	if !ok || time.Now().After(entry.expiresAt) {
-		return nil, false
-	}
-	return entry.pod, true
-}
-
-func (c *podCache) set(namespace, name string, pod *corev1.Pod) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.entries[namespace+"/"+name] = podCacheEntry{
-		pod:       pod,
-		expiresAt: time.Now().Add(podCacheTTL),
-	}
+// PodGetter returns pods for pod enrichment. If a pod does not exist, an
+// error satisfying [k8serrors.IsNotFound] has to be returned.
+type PodGetter interface {
+	GetPod(ctx context.Context, namespace, name string) (*corev1.Pod, error)
 }
 
 // newHookExecutor loads and compiles the Starlark script. The script must
 // define a top-level function named "transform".
-func newHookExecutor(hook ConfigHook, logger *slog.Logger, kubeClient kubernetes.Interface) (*hookExecutor, error) {
+func newHookExecutor(hook ConfigHook, logger *slog.Logger, pods PodGetter) (*hookExecutor, error) {
 	thread := &starlark.Thread{Name: "kigeon-hook-init"}
 	globals, err := starlark.ExecFileOptions(&syntax.FileOptions{}, thread, hook.Script, nil, nil)
 	if err != nil {
@@ -97,11 +63,10 @@ func newHookExecutor(hook ConfigHook, logger *slog.Logger, kubeClient kubernetes
 	}
 
 	return &hookExecutor{
-		fn:         fn,
-		hook:       hook,
-		logger:     logger,
-		kubeClient: kubeClient,
-		podCache:   newPodCache(),
+		fn:     fn,
+		hook:   hook,
+		logger: logger,
+		pods:   pods,
 	}, nil
 }
 
@@ -176,21 +141,19 @@ func (h *hookExecutor) execute(ctx context.Context, cfg Config, event *corev1.Ev
 	return resultCfg, nil
 }
 
-// enrichPod fetches the full pod definition (using the cache) and sets it as
-// the "pod" key on the event dict. Errors are non-fatal; callers log and
-// proceed without the pod definition.
+// enrichPod fetches the full pod definition and sets it as the "pod" key on
+// the event dict. Errors are non-fatal; callers log and proceed without the
+// pod definition.
 func (h *hookExecutor) enrichPod(ctx context.Context, eventDict *starlark.Dict, namespace, name string) error {
-	pod, ok := h.podCache.get(namespace, name)
-	if !ok {
-		var err error
-		pod, err = h.kubeClient.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
-		if err != nil {
-			if k8serrors.IsNotFound(err) {
-				return errPodNotFound
-			}
-			return fmt.Errorf("getting pod %s/%s: %w", namespace, name, err)
+	if h.pods == nil {
+		return errors.New("pod enrichment is not available")
+	}
+	pod, err := h.pods.GetPod(ctx, namespace, name)
+	if err != nil {
+		if k8serrors.IsNotFound(err) {
+			return errPodNotFound
 		}
-		h.podCache.set(namespace, name, pod)
+		return fmt.Errorf("getting pod %s/%s: %w", namespace, name, err)
 	}
 
 	podDict, err := toStarlarkDict(pod)
