@@ -315,6 +315,12 @@ func (eq *EventQueue) PublishEvent(ctx context.Context, event *corev1.Event) err
 		}
 		return fmt.Errorf("failed to publish message: %w", err)
 	}
+
+	// The event is persisted in the stream now. Failing to record it only
+	// weakens deduplication across restarts, so we do not return an error.
+	if _, err := eq.keyValue.Put(ctx, eventIdentifier, nil); err != nil {
+		logger.Warn("failed to record published event for deduplication", slog.String("error", err.Error()))
+	}
 	return nil
 }
 

@@ -325,6 +325,22 @@ func TestEventQueue_StripsManagedFields(t *testing.T) {
 	assert.NotEmpty(t, testEvent.ManagedFields, "the caller's event must not be modified")
 }
 
+func TestEventQueue_RecordsProcessedEvents(t *testing.T) {
+	t.Parallel()
+	eq := startTestQueue(t)
+	defer eq.Stop()
+
+	_, err := eq.Subscribe(t.Context(), "test-service")
+	require.NoError(t, err)
+
+	testEvent := newTestEvent("event", "uid", 1)
+	assert.False(t, eq.IsProcessed(t.Context(), testEvent))
+
+	require.NoError(t, eq.PublishEvent(t.Context(), testEvent))
+	assert.True(t, eq.IsProcessed(t.Context(), testEvent))
+	assert.False(t, eq.IsProcessed(t.Context(), newTestEvent("event", "uid", 2)))
+}
+
 func assertStreamMessages(t *testing.T, eq *eventqueue.EventQueue, want uint64) {
 	t.Helper()
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {

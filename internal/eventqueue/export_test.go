@@ -1,6 +1,10 @@
 package eventqueue
 
-import "context"
+import (
+	"context"
+
+	corev1 "k8s.io/api/core/v1"
+)
 
 const KVMaxBytes = kvMaxBytes
 
@@ -17,4 +21,11 @@ func (eq *EventQueue) StreamMessages(ctx context.Context) (uint64, error) {
 		return 0, err
 	}
 	return info.State.Msgs, nil
+}
+
+// IsProcessed reports whether the event was recorded in the persistent
+// deduplication store.
+func (eq *EventQueue) IsProcessed(ctx context.Context, event *corev1.Event) bool {
+	_, err := eq.keyValue.Get(ctx, eventIdentifier(event))
+	return err == nil
 }
