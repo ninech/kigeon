@@ -31,7 +31,8 @@ securityContext:
 
 resources: {}
 
-# Persistent storage for the embedded NATS data directory.
+# Persistent storage for the embedded NATS data directory. The volume needs to
+# provide at least config.queue.eventsMaxBytes plus 32Mi.
 # When disabled, an emptyDir is used and all NATS state is lost on pod restart.
 # This includes the deduplication KV store, so kigeon may re-send events that
 # were already forwarded before the restart. Enable persistence for production use.

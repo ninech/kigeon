@@ -100,32 +100,17 @@ func run() error {
 	}
 	logger.Info("event queue started")
 
-	// Start EventPusher
-	pushTimeout := cfg.Pusher.PushTimeout.Duration
-	ep := eventpusher.NewEventPusher(ctx, eq, k8sClient, eventpusher.Options{
-		Logger:      logger.With(slog.String("component", "eventpusher")),
-		PushTimeout: &pushTimeout,
-	})
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		ep.Run()
-	}()
-
-	// Wait for event pusher to start
-	if err := ep.WaitForStart(30 * time.Second); err != nil {
-		return fmt.Errorf("event pusher failed to start: %w", err)
-	}
-	logger.Info("event pusher started")
-
 	// Track components for shutdown
+	var wg sync.WaitGroup
 	var senders []eventsender.EventSender
 	var filters []*filter.DynamicNamespaceFilter
 
-	// Create and start event senders
+	// Create and start event senders. The queue only keeps events for
+	// existing subscriptions, so this needs to happen before the event
+	// pusher starts.
+	senderNames := make([]string, 0, len(cfg.EventSenders))
 	for _, senderCfg := range cfg.EventSenders {
+		senderNames = append(senderNames, senderCfg.Name)
 		senderLogger := logger.With(
 			slog.String("component", "eventsender"),
 			slog.String("sender", senderCfg.Name),
@@ -194,6 +179,30 @@ func run() error {
 
 		senderLogger.Info("sender started")
 	}
+
+	// Subscriptions of removed senders would retain events forever.
+	if err := eq.PruneConsumers(ctx, senderNames...); err != nil {
+		return fmt.Errorf("failed to prune stale senders: %w", err)
+	}
+
+	// Start EventPusher
+	pushTimeout := cfg.Pusher.PushTimeout.Duration
+	ep := eventpusher.NewEventPusher(ctx, eq, k8sClient, eventpusher.Options{
+		Logger:      logger.With(slog.String("component", "eventpusher")),
+		PushTimeout: &pushTimeout,
+	})
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		ep.Run()
+	}()
+
+	// Wait for event pusher to start
+	if err := ep.WaitForStart(30 * time.Second); err != nil {
+		return fmt.Errorf("event pusher failed to start: %w", err)
+	}
+	logger.Info("event pusher started")
 
 	logger.Info("kigeon started successfully", slog.Int("senders", len(senders)))
 

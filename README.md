@@ -75,10 +75,11 @@ global:
   logFormat: json
 
 queue:
-  # How long events are kept in the queue. Default: 24h
+  # How long undelivered events are kept in the queue. Default: 24h
   eventsMaxAge: 24h
 
-  # Maximum queue size on disk. Default: 500Mi
+  # Maximum queue size on disk. The data directory needs to provide at least
+  # this amount plus 32Mi for the deduplication store. Default: 500Mi
   eventsMaxBytes: 500Mi
 
   # How long processed event UIDs are remembered (prevents re-sending after
@@ -248,6 +249,10 @@ EventQueue        ← embedded NATS JetStream (persistent)
      └──▶ Sender 2 (loki) ──▶ Loki instance B
 ```
 
-Each sender subscribes independently to the queue. Namespace filters and hooks
+Each sender subscribes independently to the queue. An event is removed from
+the queue once all senders acknowledged it, so the queue only grows while a
+sender can not deliver events (bounded by `eventsMaxAge` and
+`eventsMaxBytes`). Subscriptions of senders which were removed from the
+configuration are deleted on startup. Namespace filters and hooks
 are applied per sender, so different senders can have completely different
 routing logic from the same event stream.

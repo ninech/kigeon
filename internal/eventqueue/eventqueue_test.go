@@ -183,8 +183,11 @@ func TestEventQueue_PersistenceAcrossRestart(t *testing.T) {
 	t.Parallel()
 	dataDir := t.TempDir()
 
-	// Start the queue and publish an event
+	// Start the queue, subscribe and publish an event
 	eq1, err := eventqueue.StartEventQueue(t.Context(), dataDir, defaultTestOptions())
+	require.NoError(t, err)
+
+	_, err = eq1.Subscribe(t.Context(), "test-service")
 	require.NoError(t, err)
 
 	testEvent := newTestEvent("persistent-event", "persistent-uid", 1)
@@ -203,8 +206,9 @@ func TestEventQueue_PersistenceAcrossRestart(t *testing.T) {
 	err = eq2.PublishEvent(t.Context(), testEvent)
 	require.NoError(t, err)
 
-	// Subscribe and verify we can fetch the event (from stream persistence)
-	fetcher, err := eq2.Subscribe(t.Context(), "test-service-new")
+	// Resume the durable consumer and verify we can fetch the event (from
+	// stream persistence)
+	fetcher, err := eq2.Subscribe(t.Context(), "test-service")
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
@@ -222,6 +226,128 @@ func TestEventQueue_PersistenceAcrossRestart(t *testing.T) {
 
 	_, _, err = fetcher.Fetch(ctx2)
 	require.Error(t, err) // Should timeout - no more events
+}
+
+func TestStartEventQueue_MaxStoreIndependentOfDisk(t *testing.T) {
+	t.Parallel()
+	eq := startTestQueue(t)
+	defer eq.Stop()
+
+	maxBytes := defaultTestOptions().EventsMaxBytes
+	assert.Equal(t, maxBytes.Value()+eventqueue.KVMaxBytes, eq.MaxStore())
+}
+
+func TestStartEventQueue_InvalidOptions(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]eventqueue.Options{
+		"zero max bytes":     {EventsMaxAge: time.Hour},
+		"negative max bytes": {EventsMaxAge: time.Hour, EventsMaxBytes: resource.MustParse("-1Mi")},
+	}
+	for name, opts := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, err := eventqueue.StartEventQueue(t.Context(), t.TempDir(), opts)
+			require.Error(t, err)
+		})
+	}
+}
+
+func TestEventQueue_AckedEventsAreRemoved(t *testing.T) {
+	t.Parallel()
+	eq := startTestQueue(t)
+	defer eq.Stop()
+
+	fetcher1, err := eq.Subscribe(t.Context(), "service-1")
+	require.NoError(t, err)
+	fetcher2, err := eq.Subscribe(t.Context(), "service-2")
+	require.NoError(t, err)
+
+	require.NoError(t, eq.PublishEvent(t.Context(), newTestEvent("event", "uid", 1)))
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	_, ack1, err := fetcher1.Fetch(ctx)
+	require.NoError(t, err)
+	require.NoError(t, ack1.Ack())
+	assertStreamMessages(t, eq, 1)
+
+	_, ack2, err := fetcher2.Fetch(ctx)
+	require.NoError(t, err)
+	require.NoError(t, ack2.Ack())
+	assertStreamMessages(t, eq, 0)
+}
+
+func TestEventQueue_PruneConsumers(t *testing.T) {
+	t.Parallel()
+	eq := startTestQueue(t)
+	defer eq.Stop()
+
+	fetcher, err := eq.Subscribe(t.Context(), "active")
+	require.NoError(t, err)
+	_, err = eq.Subscribe(t.Context(), "removed")
+	require.NoError(t, err)
+
+	require.NoError(t, eq.PruneConsumers(t.Context(), "active"))
+
+	require.NoError(t, eq.PublishEvent(t.Context(), newTestEvent("event", "uid", 1)))
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	_, ack, err := fetcher.Fetch(ctx)
+	require.NoError(t, err)
+	require.NoError(t, ack.Ack())
+
+	// without the pruned consumer, nothing holds interest in the event anymore
+	assertStreamMessages(t, eq, 0)
+}
+
+func TestEventQueue_StripsManagedFields(t *testing.T) {
+	t.Parallel()
+	eq := startTestQueue(t)
+	defer eq.Stop()
+
+	fetcher, err := eq.Subscribe(t.Context(), "test-service")
+	require.NoError(t, err)
+
+	testEvent := newTestEvent("event", "uid", 1)
+	testEvent.ManagedFields = []metav1.ManagedFieldsEntry{{Manager: "kubelet", Operation: metav1.ManagedFieldsOperationUpdate}}
+	require.NoError(t, eq.PublishEvent(t.Context(), testEvent))
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	event, ack, err := fetcher.Fetch(ctx)
+	require.NoError(t, err)
+	require.NoError(t, ack.Ack())
+
+	assert.Empty(t, event.ManagedFields)
+	assert.NotEmpty(t, testEvent.ManagedFields, "the caller's event must not be modified")
+}
+
+func TestEventQueue_RecordsProcessedEvents(t *testing.T) {
+	t.Parallel()
+	eq := startTestQueue(t)
+	defer eq.Stop()
+
+	_, err := eq.Subscribe(t.Context(), "test-service")
+	require.NoError(t, err)
+
+	testEvent := newTestEvent("event", "uid", 1)
+	assert.False(t, eq.IsProcessed(t.Context(), testEvent))
+
+	require.NoError(t, eq.PublishEvent(t.Context(), testEvent))
+	assert.True(t, eq.IsProcessed(t.Context(), testEvent))
+	assert.False(t, eq.IsProcessed(t.Context(), newTestEvent("event", "uid", 2)))
+}
+
+func assertStreamMessages(t *testing.T, eq *eventqueue.EventQueue, want uint64) {
+	t.Helper()
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		got, err := eq.StreamMessages(t.Context())
+		require.NoError(c, err)
+		assert.Equal(c, want, got)
+	}, 5*time.Second, 50*time.Millisecond)
 }
 
 func TestEventQueue_Stop(t *testing.T) {
