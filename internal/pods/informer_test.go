@@ -11,7 +11,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes/fake"
+	clienttesting "k8s.io/client-go/testing"
 	"k8s.io/utils/clock"
 	clocktesting "k8s.io/utils/clock/testing"
 
@@ -156,11 +158,30 @@ func startInformer(t *testing.T, client *fake.Clientset, retention time.Duration
 
 func startInformerWithClock(t *testing.T, client *fake.Clientset, retention time.Duration, clock clock.Clock) *pods.Informer {
 	t.Helper()
+	// The informer is synced once pods were listed, but the fake client
+	// drops changes which happen before the watch is established.
+	watching := make(chan struct{})
+	var once sync.Once
+	client.PrependWatchReactor("pods", func(action clienttesting.Action) (bool, watch.Interface, error) {
+		w, err := client.Tracker().Watch(action.GetResource(), action.GetNamespace())
+		if err != nil {
+			return false, nil, err
+		}
+		once.Do(func() { close(watching) })
+		return true, w, nil
+	})
+
 	informer := pods.NewInformerWithClock(client, pods.Options{DeletedPodRetention: retention}, clock)
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	require.NoError(t, informer.Start(ctx))
 	t.Cleanup(informer.Stop)
+
+	select {
+	case <-watching:
+	case <-ctx.Done():
+		t.Fatal("pod watch was not established")
+	}
 	return informer
 }
 
