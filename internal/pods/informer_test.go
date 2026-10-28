@@ -12,6 +12,8 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/utils/clock"
+	clocktesting "k8s.io/utils/clock/testing"
 
 	"github.com/ninech/kigeon/internal/pods"
 )
@@ -60,34 +62,39 @@ func TestInformer_GetPod(t *testing.T) {
 	t.Run("remembers unknown pods", func(t *testing.T) {
 		t.Parallel()
 		client := fake.NewClientset()
-		informer := startInformer(t, client, time.Minute)
+		fakeClock := clocktesting.NewFakeClock(time.Now())
+		informer := startInformerWithClock(t, client, time.Minute, fakeClock)
 
 		for range 3 {
 			_, err := informer.GetPod(t.Context(), "project", "gone")
 			assert.True(t, k8serrors.IsNotFound(err))
 		}
+		assert.Equal(t, 1, podGets(client))
 
-		gets := 0
-		for _, action := range client.Actions() {
-			if action.GetVerb() == "get" && action.GetResource().Resource == "pods" {
-				gets++
-			}
-		}
-		assert.Equal(t, 1, gets)
+		// the pod is queried again once the TTL expired
+		fakeClock.Step(pods.NotFoundTTL + time.Second)
+		_, err := informer.GetPod(t.Context(), "project", "gone")
+		assert.True(t, k8serrors.IsNotFound(err))
+		assert.Equal(t, 2, podGets(client))
 	})
 
 	t.Run("forgets deleted pods after the retention", func(t *testing.T) {
 		t.Parallel()
 		pod := newPod()
 		client := fake.NewClientset(pod)
-		informer := startInformer(t, client, 50*time.Millisecond)
+		fakeClock := clocktesting.NewFakeClock(time.Now())
+		informer := startInformerWithClock(t, client, time.Minute, fakeClock)
 
 		require.NoError(t, client.CoreV1().Pods(pod.Namespace).Delete(t.Context(), pod.Name, metav1.DeleteOptions{}))
+		waitForDeletion(t, informer, pod)
 
-		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			_, err := informer.GetPod(t.Context(), pod.Namespace, pod.Name)
-			assert.True(c, k8serrors.IsNotFound(err))
-		}, 5*time.Second, 20*time.Millisecond)
+		fakeClock.Step(59 * time.Second)
+		_, err := informer.GetPod(t.Context(), pod.Namespace, pod.Name)
+		require.NoError(t, err)
+
+		fakeClock.Step(2 * time.Second)
+		_, err = informer.GetPod(t.Context(), pod.Namespace, pod.Name)
+		assert.True(t, k8serrors.IsNotFound(err))
 	})
 }
 
@@ -144,12 +151,28 @@ func TestInformer_OnOOMKilled(t *testing.T) {
 
 func startInformer(t *testing.T, client *fake.Clientset, retention time.Duration) *pods.Informer {
 	t.Helper()
-	informer := pods.NewInformer(client, pods.Options{DeletedPodRetention: retention})
+	return startInformerWithClock(t, client, retention, clock.RealClock{})
+}
+
+func startInformerWithClock(t *testing.T, client *fake.Clientset, retention time.Duration, clock clock.Clock) *pods.Informer {
+	t.Helper()
+	informer := pods.NewInformerWithClock(client, pods.Options{DeletedPodRetention: retention}, clock)
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	require.NoError(t, informer.Start(ctx))
 	t.Cleanup(informer.Stop)
 	return informer
+}
+
+// podGets returns the number of pod GET requests sent to the client.
+func podGets(client *fake.Clientset) int {
+	gets := 0
+	for _, action := range client.Actions() {
+		if action.GetVerb() == "get" && action.GetResource().Resource == "pods" {
+			gets++
+		}
+	}
+	return gets
 }
 
 // waitForDeletion waits until the informer observed the deletion of the pod.

@@ -16,10 +16,12 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	utilcache "k8s.io/apimachinery/pkg/util/cache"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	corelisters "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/utils/clock"
 )
 
 const (
@@ -48,9 +50,13 @@ type Informer struct {
 	factory  informers.SharedInformerFactory
 	informer cache.SharedIndexInformer
 	lister   corelisters.PodLister
-	deleted  *expiringCache[*corev1.Pod]
-	notFound *expiringCache[struct{}]
 	logger   *slog.Logger
+
+	// deleted keeps deleted pods for deletedTTL.
+	deleted    *utilcache.Expiring
+	deletedTTL time.Duration
+	// notFound remembers pods which do not exist.
+	notFound *utilcache.Expiring
 
 	enabled  atomic.Bool
 	started  atomic.Bool
@@ -60,6 +66,10 @@ type Informer struct {
 
 // NewInformer creates a new pod informer.
 func NewInformer(client kubernetes.Interface, options Options) *Informer {
+	return newInformer(client, options, clock.RealClock{})
+}
+
+func newInformer(client kubernetes.Interface, options Options, clock clock.Clock) *Informer {
 	logger := options.Logger
 	if logger == nil {
 		logger = slog.New(slog.NewJSONHandler(io.Discard, nil))
@@ -77,10 +87,13 @@ func NewInformer(client kubernetes.Interface, options Options) *Informer {
 		factory:  factory,
 		informer: podInformer.Informer(),
 		lister:   podInformer.Lister(),
-		deleted:  newExpiringCache[*corev1.Pod](retention),
-		notFound: newExpiringCache[struct{}](notFoundTTL),
 		logger:   logger,
-		stopCh:   make(chan struct{}),
+
+		deleted:    utilcache.NewExpiringWithClock(clock),
+		deletedTTL: retention,
+		notFound:   utilcache.NewExpiringWithClock(clock),
+
+		stopCh: make(chan struct{}),
 	}
 	return i
 }
@@ -101,7 +114,7 @@ func (i *Informer) Start(ctx context.Context) error {
 	if _, err := i.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		DeleteFunc: func(obj any) {
 			if pod := toPod(obj); pod != nil {
-				i.deleted.add(podKey(pod.Namespace, pod.Name), pod)
+				i.deleted.Set(podKey(pod.Namespace, pod.Name), pod, i.deletedTTL)
 			}
 		},
 	}); err != nil {
@@ -142,17 +155,17 @@ func (i *Informer) GetPod(ctx context.Context, namespace, name string) (*corev1.
 		return nil, err
 	}
 	key := podKey(namespace, name)
-	if pod, ok := i.deleted.get(key); ok {
-		return pod, nil
+	if pod, ok := i.deleted.Get(key); ok {
+		return pod.(*corev1.Pod), nil
 	}
-	if _, ok := i.notFound.get(key); ok {
+	if _, ok := i.notFound.Get(key); ok {
 		return nil, err
 	}
 
 	// The pod might not be observed by the informer yet.
 	pod, err = i.client.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
 	if k8serrors.IsNotFound(err) {
-		i.notFound.add(key, struct{}{})
+		i.notFound.Set(key, struct{}{}, notFoundTTL)
 	}
 	return pod, err
 }
@@ -218,43 +231,4 @@ func stripManagedFields(obj any) (any, error) {
 		accessor.SetManagedFields(nil)
 	}
 	return obj, nil
-}
-
-// expiringCache keeps entries for a limited time.
-type expiringCache[V any] struct {
-	ttl     time.Duration
-	mu      sync.Mutex
-	entries map[string]expiringEntry[V]
-}
-
-type expiringEntry[V any] struct {
-	value     V
-	expiresAt time.Time
-}
-
-func newExpiringCache[V any](ttl time.Duration) *expiringCache[V] {
-	return &expiringCache[V]{ttl: ttl, entries: map[string]expiringEntry[V]{}}
-}
-
-func (c *expiringCache[V]) add(key string, value V) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	now := time.Now()
-	for k, entry := range c.entries {
-		if now.After(entry.expiresAt) {
-			delete(c.entries, k)
-		}
-	}
-	c.entries[key] = expiringEntry[V]{value: value, expiresAt: now.Add(c.ttl)}
-}
-
-func (c *expiringCache[V]) get(key string) (V, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	entry, ok := c.entries[key]
-	if !ok || time.Now().After(entry.expiresAt) {
-		var zero V
-		return zero, false
-	}
-	return entry.value, true
 }
