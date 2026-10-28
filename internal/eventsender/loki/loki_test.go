@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/ninech/kigeon/internal/eventqueue"
+	"github.com/ninech/kigeon/internal/eventsender"
 )
 
 func TestNewSender(t *testing.T) {
@@ -26,7 +27,7 @@ func TestNewSender(t *testing.T) {
 		name        string
 		senderName  string
 		config      Config
-		fetcher     *eventqueue.EventFetcher
+		fetcher     eventsender.EventFetcher
 		expectError string
 	}{
 		{

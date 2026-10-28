@@ -6,15 +6,12 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/ninech/kigeon/internal/eventqueue"
-	"github.com/ninech/kigeon/internal/filter"
 	"github.com/ninech/kigeon/internal/pods"
 )
 
 // FactoryOptions provides common options for creating event senders.
 type FactoryOptions struct {
 	Logger *slog.Logger
-	Filter *filter.DynamicNamespaceFilter
 	// Pods provides pods for senders. Senders which need it have to
 	// enable it.
 	Pods *pods.Informer
@@ -23,7 +20,7 @@ type FactoryOptions struct {
 }
 
 // SenderFactory is a function that creates an EventSender from configuration.
-type SenderFactory func(name string, rawConfig json.RawMessage, fetcher *eventqueue.EventFetcher, opts FactoryOptions) (EventSender, error)
+type SenderFactory func(name string, rawConfig json.RawMessage, fetcher EventFetcher, opts FactoryOptions) (EventSender, error)
 
 var (
 	registryMu sync.RWMutex
@@ -45,7 +42,7 @@ func Register(typeName string, factory SenderFactory) {
 }
 
 // Create instantiates an EventSender by type name using the registered factory.
-func Create(typeName, name string, rawConfig json.RawMessage, fetcher *eventqueue.EventFetcher, opts FactoryOptions) (EventSender, error) {
+func Create(typeName, name string, rawConfig json.RawMessage, fetcher EventFetcher, opts FactoryOptions) (EventSender, error) {
 	registryMu.RLock()
 	factory, ok := registry[typeName]
 	registryMu.RUnlock()

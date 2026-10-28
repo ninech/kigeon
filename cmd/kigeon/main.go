@@ -155,9 +155,13 @@ func run() error {
 		}
 
 		// Subscribe to queue
-		fetcher, err := eq.Subscribe(ctx, senderCfg.Name)
+		subscription, err := eq.Subscribe(ctx, senderCfg.Name)
 		if err != nil {
 			return fmt.Errorf("failed to subscribe sender %s to queue: %w", senderCfg.Name, err)
+		}
+		var fetcher eventsender.EventFetcher = subscription
+		if nsFilter != nil {
+			fetcher = eventsender.FilteredFetcher(fetcher, nsFilter, senderLogger)
 		}
 
 		// Create sender using registry
@@ -168,7 +172,6 @@ func run() error {
 			fetcher,
 			eventsender.FactoryOptions{
 				Logger: senderLogger,
-				Filter: nsFilter,
 				Pods:   podInformer,
 				Noop:   senderCfg.Noop,
 			},
