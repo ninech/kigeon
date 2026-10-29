@@ -325,7 +325,8 @@ kigeon --config /etc/kigeon/config.yaml --log-level debug
 
 kigeon serves Prometheus metrics on `/metrics`, a liveness check on
 `/healthz` and a readiness check on `/readyz` (ready once all senders are
-subscribed and events are watched) on `global.metricsBindAddress`.
+subscribed and events are watched) on `global.metricsBindAddress`. The Helm
+chart can create a `ServiceMonitor` with `serviceMonitor.enabled`.
 
 | Metric | Labels | Description |
 |--------|--------|-------------|

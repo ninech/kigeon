@@ -8,3 +8,7 @@ spec:
   clusterIP: None
   selector:
     {{- include "kigeon.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: metrics
+      port: {{ .Values.metrics.port }}
+      targetPort: metrics
