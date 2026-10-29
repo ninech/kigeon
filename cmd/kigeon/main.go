@@ -101,9 +101,10 @@ func run() error {
 	go metricsServer.Serve()
 	logger.Info("metrics server started", slog.String("address", metricsServer.Addr()))
 
-	// handle shutdown signals
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)
+	// handle shutdown signals. sigCtx is separate from ctx, as the
+	// components are stopped in order before ctx is canceled.
+	sigCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
 
 	// Start EventQueue
 	kubernetesEventsMaxLifetime := cfg.Queue.KubernetesEventsMaxLifetime.Duration
@@ -261,8 +262,10 @@ func run() error {
 	logger.Info("kigeon started successfully", slog.Int("senders", len(senders)))
 
 	// Wait for shutdown signal
-	sig := <-sigChan
-	logger.Info("received shutdown signal", slog.String("signal", sig.String()))
+	<-sigCtx.Done()
+	// a second signal terminates kigeon immediately
+	stop()
+	logger.Info("received shutdown signal", slog.String("cause", context.Cause(sigCtx).Error()))
 
 	// Graceful shutdown
 	logger.Info("initiating graceful shutdown")

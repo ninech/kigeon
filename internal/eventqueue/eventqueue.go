@@ -103,6 +103,9 @@ func StartEventQueue(ctx context.Context, dataDir string, options Options) (*Eve
 		JetStreamMaxStore: eventsMaxBytes + kvMaxBytes,
 		StoreDir:          dataDir,
 		Debug:             options.Debug,
+		// NATS would otherwise exit the process on SIGINT and SIGTERM,
+		// before kigeon is shut down.
+		NoSigs: true,
 	}
 
 	ns, err := server.NewServer(opts)
