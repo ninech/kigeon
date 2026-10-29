@@ -41,6 +41,18 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           args:
             - --config=/etc/kigeon/config.yaml
+            - --metrics-bind-address=:{{ .Values.metrics.port }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: metrics
           {{- with .Values.extraEnv }}
           env:
             {{- toYaml . | nindent 12 }}
