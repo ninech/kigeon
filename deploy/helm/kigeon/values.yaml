@@ -69,6 +69,9 @@ config:
     kubernetesEventsMaxLifetime: 1h
   pusher:
     pushTimeout: 5s
+  pods:
+    oomKilledEvents: false
+    deletedPodRetention: 5m
   eventsenders: []
   # Example sender:
   # eventsenders:
