@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ninech/kigeon/internal/eventqueue"
 	"github.com/ninech/kigeon/internal/eventsender"
 )
 
@@ -35,7 +34,7 @@ func TestRegister_nilFactoryPanics(t *testing.T) {
 
 func TestRegister_duplicatePanics(t *testing.T) {
 	t.Parallel()
-	factory := func(name string, _ json.RawMessage, _ *eventqueue.EventFetcher, _ eventsender.FactoryOptions) (eventsender.EventSender, error) {
+	factory := func(name string, _ json.RawMessage, _ eventsender.EventFetcher, _ eventsender.FactoryOptions) (eventsender.EventSender, error) {
 		return &stubSender{name: name}, nil
 	}
 	eventsender.Register("test-dup-type-qwerty1", factory)
@@ -47,7 +46,7 @@ func TestRegister_duplicatePanics(t *testing.T) {
 func TestRegisteredTypes_includesFreshType(t *testing.T) {
 	t.Parallel()
 	const typeName = "test-fresh-type-poiuy2"
-	factory := func(name string, _ json.RawMessage, _ *eventqueue.EventFetcher, _ eventsender.FactoryOptions) (eventsender.EventSender, error) {
+	factory := func(name string, _ json.RawMessage, _ eventsender.EventFetcher, _ eventsender.FactoryOptions) (eventsender.EventSender, error) {
 		return &stubSender{name: name}, nil
 	}
 	eventsender.Register(typeName, factory)
@@ -61,7 +60,7 @@ func TestCreate_callsFactoryWithCorrectName(t *testing.T) {
 	const typeName = "test-factory-call-asdfg3"
 	var capturedName string
 
-	factory := func(name string, _ json.RawMessage, _ *eventqueue.EventFetcher, _ eventsender.FactoryOptions) (eventsender.EventSender, error) {
+	factory := func(name string, _ json.RawMessage, _ eventsender.EventFetcher, _ eventsender.FactoryOptions) (eventsender.EventSender, error) {
 		capturedName = name
 		return &stubSender{name: name}, nil
 	}

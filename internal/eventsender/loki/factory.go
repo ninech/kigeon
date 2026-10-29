@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/ninech/kigeon/internal/eventqueue"
 	"github.com/ninech/kigeon/internal/eventsender"
 )
 
@@ -16,7 +15,7 @@ func init() {
 }
 
 // Factory creates a new Loki sender from configuration.
-func Factory(name string, rawConfig json.RawMessage, fetcher *eventqueue.EventFetcher, opts eventsender.FactoryOptions) (eventsender.EventSender, error) {
+func Factory(name string, rawConfig json.RawMessage, fetcher eventsender.EventFetcher, opts eventsender.FactoryOptions) (eventsender.EventSender, error) {
 	config, err := parseConfig(rawConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse loki config: %w", err)

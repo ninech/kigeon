@@ -17,6 +17,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/ninech/kigeon/internal/eventqueue"
+	"github.com/ninech/kigeon/internal/eventsender"
 )
 
 const (
@@ -29,7 +30,7 @@ const (
 type Sender struct {
 	name         string
 	config       Config
-	eventFetcher *eventqueue.EventFetcher
+	eventFetcher eventsender.EventFetcher
 	httpClient   *http.Client
 	logger       *slog.Logger
 	cancel       context.CancelFunc
@@ -47,7 +48,7 @@ type SenderOptions struct {
 }
 
 // NewSender creates a new Loki sender.
-func NewSender(name string, config Config, eventFetcher *eventqueue.EventFetcher, options SenderOptions) (*Sender, error) {
+func NewSender(name string, config Config, eventFetcher eventsender.EventFetcher, options SenderOptions) (*Sender, error) {
 	if name == "" {
 		return nil, fmt.Errorf("sender name is required")
 	}
