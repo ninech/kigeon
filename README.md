@@ -47,6 +47,16 @@ helm install kigeon kigeon/kigeon \
   --set config.eventsenders[0].config.url=http://loki:3100
 ```
 
+Hook scripts can be passed with `hooks`, they are mounted to
+`/etc/kigeon/hooks/<name>`:
+
+```bash
+helm install kigeon kigeon/kigeon \
+  --set-file hooks.my-hook\\.star=./my-hook.star \
+  --set config.eventsenders[0].config.hook.script=/etc/kigeon/hooks/my-hook.star \
+  ...
+```
+
 For a full list of configuration options see [`deploy/helm/kigeon/values.yaml`](deploy/helm/kigeon/values.yaml).
 
 ### Container image
