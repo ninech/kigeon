@@ -194,6 +194,17 @@ def transform(config, event):
     return config
 ```
 
+Output of `print()` is logged at info level, for example to find events which
+a hook does not handle yet:
+
+```python
+def transform(config, event):
+    if event.get("reason") not in ("Started", "BackOff"):
+        print("dropped event with reason", event.get("reason"))
+        return None
+    return config
+```
+
 ### Stream labels
 
 By default, every event is sent with the configured `streamLabels` and these
