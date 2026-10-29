@@ -89,7 +89,7 @@ func TestSender_sendToLoki(t *testing.T) {
 	}{
 		{
 			name:           "successful send",
-			config:         Config{},
+			config:         Config{StreamLabels: map[string]string{"namespace": "default", "involved_object_kind": "Pod"}},
 			serverResponse: http.StatusNoContent,
 			validateReq: func(t *testing.T, req *http.Request, body []byte) {
 				t.Helper()
@@ -100,8 +100,7 @@ func TestSender_sendToLoki(t *testing.T) {
 				err := json.Unmarshal(body, &payload)
 				require.NoError(t, err)
 				require.Len(t, payload.Streams, 1)
-				assert.Equal(t, "default", payload.Streams[0].Stream["namespace"])
-				assert.Equal(t, "Pod", payload.Streams[0].Stream["involved_object_kind"])
+				assert.Equal(t, map[string]string{"namespace": "default", "involved_object_kind": "Pod"}, payload.Streams[0].Stream)
 			},
 		},
 		{
@@ -156,6 +155,13 @@ func TestSender_sendToLoki(t *testing.T) {
 			serverResponse: http.StatusInternalServerError,
 			serverBody:     "internal error",
 			expectError:    "loki returned status 500",
+		},
+		{
+			name:           "invalid event",
+			config:         Config{},
+			serverResponse: http.StatusBadRequest,
+			serverBody:     "entry too far behind",
+			expectError:    "loki rejected the event: loki returned status 400: entry too far behind",
 		},
 	}
 
@@ -353,8 +359,8 @@ func TestSender_buildPushPayload(t *testing.T) {
 
 		require.Len(t, payload.Streams, 1)
 		stream := payload.Streams[0]
-		assert.Equal(t, "kigeon", stream.Stream["app"])
-		assert.Equal(t, "default", stream.Stream["namespace"])
+		// the stream labels are used as they are
+		assert.Equal(t, map[string]string{"app": "kigeon"}, stream.Stream)
 		require.Len(t, stream.Values, 1)
 		require.Len(t, stream.Values[0], 2)
 		assert.NotEmpty(t, stream.Values[0][0])

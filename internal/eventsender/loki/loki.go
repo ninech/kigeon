@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -26,6 +27,10 @@ const (
 	defaultTimeout = 10 * time.Second
 )
 
+// errRejected is returned if Loki rejected an event as invalid. Sending it
+// again would fail as well.
+var errRejected = errors.New("loki rejected the event")
+
 // Sender sends Kubernetes events to a Loki instance.
 type Sender struct {
 	name         string
@@ -33,9 +38,11 @@ type Sender struct {
 	eventFetcher eventsender.EventFetcher
 	httpClient   *http.Client
 	logger       *slog.Logger
-	cancel       context.CancelFunc
 	hook         *hookExecutor
 	noop         bool
+
+	stopCh   chan struct{}
+	stopOnce sync.Once
 }
 
 // SenderOptions allows to configure the Sender.
@@ -93,6 +100,7 @@ func NewSender(name string, config Config, eventFetcher eventsender.EventFetcher
 		logger:       logger,
 		hook:         hook,
 		noop:         options.Noop,
+		stopCh:       make(chan struct{}),
 	}, nil
 }
 
@@ -105,7 +113,14 @@ func (s *Sender) Name() string {
 // It blocks until the context is cancelled or Stop is called.
 func (s *Sender) Run(ctx context.Context) error {
 	ctx, cancel := context.WithCancel(ctx)
-	s.cancel = cancel
+	defer cancel()
+	go func() {
+		select {
+		case <-s.stopCh:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
 
 	s.logger.Info("starting loki sender", slog.String("name", s.name), slog.String("url", s.config.URL))
 
@@ -113,7 +128,7 @@ func (s *Sender) Run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			s.logger.Info("loki sender stopped", slog.String("name", s.name))
-			return ctx.Err()
+			return nil
 		default:
 			if err := s.processEvent(ctx); err != nil {
 				s.logger.Error("failed to process event", slog.String("name", s.name), slog.String("error", err.Error()))
@@ -124,9 +139,7 @@ func (s *Sender) Run(ctx context.Context) error {
 
 // Stop signals the sender to stop processing and clean up resources.
 func (s *Sender) Stop() {
-	if s.cancel != nil {
-		s.cancel()
-	}
+	s.stopOnce.Do(func() { close(s.stopCh) })
 }
 
 func (s *Sender) processEvent(ctx context.Context) error {
@@ -143,9 +156,9 @@ func (s *Sender) processEvent(ctx context.Context) error {
 		return fmt.Errorf("failed to fetch event: %w", err)
 	}
 
-	effectiveConfig := s.config
+	effectiveConfig := s.defaultConfig(event)
 	if s.hook != nil {
-		hooked, err := s.hook.execute(ctx, s.config, event)
+		hooked, err := s.hook.execute(ctx, effectiveConfig, event)
 		if errors.Is(err, errSkip) {
 			s.logger.Debug("hook skipped event",
 				slog.String("name", s.name),
@@ -160,6 +173,20 @@ func (s *Sender) processEvent(ctx context.Context) error {
 		effectiveConfig = hooked
 	}
 
+	return s.deliver(ctx, event, effectiveConfig, ack)
+}
+
+// defaultConfig returns the sender config for the event without hook. Its
+// stream labels consist of the configured labels and labels of the event.
+func (s *Sender) defaultConfig(event *corev1.Event) Config {
+	cfg := s.config
+	cfg.StreamLabels = s.buildLabels(event, s.config)
+	return cfg
+}
+
+// deliver sends the event with the given config and acknowledges it. Events
+// which Loki rejects as invalid are acknowledged without retrying.
+func (s *Sender) deliver(ctx context.Context, event *corev1.Event, cfg Config, ack eventqueue.EventAcknowledger) error {
 	if s.noop {
 		eventJSON, err := json.Marshal(event)
 		if err != nil {
@@ -169,20 +196,28 @@ func (s *Sender) processEvent(ctx context.Context) error {
 		return ack.Ack()
 	}
 
-	if err := s.sendToLoki(ctx, event, effectiveConfig); err != nil {
+	err := s.sendToLoki(ctx, event, cfg)
+	switch {
+	case errors.Is(err, errRejected):
+		s.logger.Warn("dropping event rejected by loki",
+			slog.String("name", s.name),
+			slog.String("namespace", event.Namespace),
+			slog.String("reason", event.Reason),
+			slog.String("error", err.Error()),
+		)
+	case err != nil:
 		return fmt.Errorf("failed to send event to loki: %w", err)
+	default:
+		s.logger.Debug("event sent to loki",
+			slog.String("namespace", event.Namespace),
+			slog.String("name", event.Name),
+			slog.String("reason", event.Reason),
+		)
 	}
 
 	if err := ack.Ack(); err != nil {
 		return fmt.Errorf("failed to acknowledge event: %w", err)
 	}
-
-	s.logger.Debug("event sent to loki",
-		slog.String("namespace", event.Namespace),
-		slog.String("name", event.Name),
-		slog.String("reason", event.Reason),
-	)
-
 	return nil
 }
 
@@ -210,13 +245,7 @@ func (s *Sender) handleHookError(ctx context.Context, hookErr error, event *core
 			slog.String("name", s.name),
 			slog.String("error", hookErr.Error()),
 		)
-		if err := s.sendToLoki(ctx, event, s.config); err != nil {
-			return fmt.Errorf("failed to send event to loki: %w", err)
-		}
-		if err := ack.Ack(); err != nil {
-			return fmt.Errorf("failed to acknowledge event: %w", err)
-		}
-		return nil
+		return s.deliver(ctx, event, s.defaultConfig(event), ack)
 	}
 }
 
@@ -255,7 +284,11 @@ func (s *Sender) sendToLoki(ctx context.Context, event *corev1.Event, cfg Config
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("loki returned status %d: %s", resp.StatusCode, string(respBody))
+		err := fmt.Errorf("loki returned status %d: %s", resp.StatusCode, string(respBody))
+		if resp.StatusCode == http.StatusBadRequest {
+			return fmt.Errorf("%w: %w", errRejected, err)
+		}
+		return err
 	}
 
 	return nil
@@ -272,7 +305,6 @@ type lokiStream struct {
 }
 
 func (s *Sender) buildPushPayload(event *corev1.Event, cfg Config) lokiPushPayload {
-	labels := s.buildLabels(event, cfg)
 	timestamp := s.getEventTimestamp(event)
 	message := cfg.Message
 	if message == "" {
@@ -282,7 +314,7 @@ func (s *Sender) buildPushPayload(event *corev1.Event, cfg Config) lokiPushPaylo
 	return lokiPushPayload{
 		Streams: []lokiStream{
 			{
-				Stream: labels,
+				Stream: cfg.StreamLabels,
 				Values: [][]string{
 					{strconv.FormatInt(timestamp.UnixNano(), 10), message},
 				},

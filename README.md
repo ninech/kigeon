@@ -131,7 +131,8 @@ config:
   # X-Scope-OrgID header for multi-tenant Loki.
   tenantID: my-tenant
 
-  # Static labels added to every log stream.
+  # Static labels added to every log stream. Labels of the event (see "Stream
+  # labels" below) take precedence.
   streamLabels:
     app: kigeon
 
@@ -182,6 +183,39 @@ def transform(config, event):
         config["tenantID"] = "prod"
     return config
 ```
+
+### Stream labels
+
+By default, every event is sent with the configured `streamLabels` and these
+labels of the event:
+
+| Label | Value |
+|-------|-------|
+| `namespace` | Namespace of the event |
+| `involved_object_kind` | Kind of the involved object |
+| `involved_object_name` | Name of the involved object |
+| `reason` | Reason of the event |
+| `type` | `Normal` or `Warning` |
+| `source_component` | Component which reported the event (if set) |
+| `source_host` | Node which reported the event (if set) |
+
+A hook receives these labels in `config["streamLabels"]` and the sender uses
+exactly the labels the hook returns. Labels like `involved_object_name` or
+`source_host` create many small streams, which Loki does not handle well. A
+hook can replace the labels to keep their number low:
+
+```python
+def transform(config, event):
+    config["streamLabels"] = {
+        "namespace": event["involvedObject"].get("namespace", ""),
+        "source": "event",
+    }
+    return config
+```
+
+If Loki rejects an event as invalid (HTTP 400, e.g. because of an invalid
+label), the event is dropped and a warning is logged. Other errors are
+retried.
 
 ### Hook config
 
