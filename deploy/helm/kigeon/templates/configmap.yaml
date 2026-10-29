@@ -7,3 +7,10 @@ metadata:
 data:
   config.yaml: |
     {{- .Values.config | toYaml | nindent 4 }}
+  {{- range $name, $script := .Values.hooks }}
+  {{- if eq $name "config.yaml" }}
+  {{- fail "hooks: config.yaml is reserved for the kigeon configuration" }}
+  {{- end }}
+  {{ $name }}: |
+    {{- $script | trimSuffix "\n" | nindent 4 }}
+  {{- end }}

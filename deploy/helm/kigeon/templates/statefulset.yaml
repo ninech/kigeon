@@ -16,7 +16,7 @@ spec:
   template:
     metadata:
       annotations:
-        checksum/config: {{ .Values.config | toYaml | sha256sum }}
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
         {{- with .Values.podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -59,6 +59,13 @@ spec:
         - name: config
           configMap:
             name: {{ include "kigeon.fullname" . }}
+            items:
+              - key: config.yaml
+                path: config.yaml
+              {{- range $name, $_ := .Values.hooks }}
+              - key: {{ $name }}
+                path: hooks/{{ $name }}
+              {{- end }}
         {{- if not .Values.persistence.enabled }}
         - name: data
           emptyDir: {}

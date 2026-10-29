@@ -56,6 +56,16 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 
+# Hook scripts by file name, mounted to /etc/kigeon/hooks/<name>.
+hooks: {}
+# Example hook, referenced in a sender with
+# hook.script: /etc/kigeon/hooks/my-hook.star
+# hooks:
+#   my-hook.star: |
+#     def transform(config, event):
+#         config["streamLabels"]["source"] = "event"
+#         return config
+
 # Full kigeon configuration. Rendered verbatim into a ConfigMap.
 # See https://github.com/ninech/kigeon for all available options.
 config:
