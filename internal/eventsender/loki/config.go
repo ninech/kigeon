@@ -31,12 +31,6 @@ type Config struct {
 	// Message overrides the log line content for this event. When empty the
 	// default JSON-formatted event message is used.
 	Message string `json:"message,omitempty"`
-	// BatchWait is the maximum time to wait before sending a batch of logs.
-	// Defaults to 1 second if not set.
-	BatchWait time.Duration `json:"batchWait,omitempty"`
-	// BatchSize is the maximum number of log entries to batch before sending.
-	// Defaults to 100 if not set.
-	BatchSize int `json:"batchSize,omitempty"`
 	// Hook configures an optional Starlark script that can dynamically modify
 	// this config on a per-event basis before sending to Loki.
 	Hook *ConfigHook `json:"hook,omitempty"`

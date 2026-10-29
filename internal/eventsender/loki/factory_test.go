@@ -23,13 +23,12 @@ func TestParseConfig(t *testing.T) {
 	}{
 		{
 			name:      "valid full config",
-			rawConfig: json.RawMessage(`{"url":"http://loki:3100","tenantID":"prod","streamLabels":{"app":"kigeon"},"batchSize":50}`),
+			rawConfig: json.RawMessage(`{"url":"http://loki:3100","tenantID":"prod","streamLabels":{"app":"kigeon"}}`),
 			validate: func(t *testing.T, cfg Config) {
 				t.Helper()
 				assert.Equal(t, "http://loki:3100", cfg.URL)
 				assert.Equal(t, "prod", cfg.TenantID)
 				assert.Equal(t, map[string]string{"app": "kigeon"}, cfg.StreamLabels)
-				assert.Equal(t, 50, cfg.BatchSize)
 			},
 		},
 		{
@@ -90,7 +89,7 @@ func TestParseConfig(t *testing.T) {
 		},
 		{
 			name:        "wrong type for field",
-			rawConfig:   json.RawMessage(`{"url":"http://loki:3100","batchSize":"not-a-number"}`),
+			rawConfig:   json.RawMessage(`{"url":"http://loki:3100","streamLabels":"not-a-map"}`),
 			expectError: true,
 		},
 		{
