@@ -3,8 +3,11 @@
 package metrics
 
 import (
+	"net/http"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 const namespace = "kigeon"
@@ -58,14 +61,22 @@ var (
 		Help:      "Results of processing events per sender.",
 	}, []string{"sender", "result"})
 
-	// SenderPushDuration observes the duration of pushes to the receiver
-	// of a sender.
-	SenderPushDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+	// SenderRequests counts the HTTP requests to the receiver of a sender
+	// by status code.
+	SenderRequests = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Namespace: namespace,
-		Name:      "sender_push_duration_seconds",
-		Help:      "Duration of pushes to the receiver of a sender.",
+		Name:      "sender_http_requests_total",
+		Help:      "HTTP requests to the receiver of a sender.",
+	}, []string{"sender", "code"})
+
+	// SenderRequestDuration observes the duration of HTTP requests to the
+	// receiver of a sender.
+	SenderRequestDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: namespace,
+		Name:      "sender_http_request_duration_seconds",
+		Help:      "Duration of HTTP requests to the receiver of a sender.",
 		Buckets:   prometheus.DefBuckets,
-	}, []string{"sender"})
+	}, []string{"sender", "code"})
 
 	// HookDuration observes the duration of hook executions, including
 	// the pod enrichment.
@@ -84,6 +95,14 @@ var (
 	}, []string{"sender"})
 )
 
+// InstrumentRoundTripper wraps next with the request metrics of a sender.
+// Requests without a response, like connection errors, are not counted.
+func InstrumentRoundTripper(sender string, next http.RoundTripper) http.RoundTripper {
+	labels := prometheus.Labels{"sender": sender}
+	return promhttp.InstrumentRoundTripperCounter(SenderRequests.MustCurryWith(labels),
+		promhttp.InstrumentRoundTripperDuration(SenderRequestDuration.MustCurryWith(labels), next))
+}
+
 func init() {
 	Registry.MustRegister(
 		collectors.NewGoCollector(),
@@ -91,8 +110,12 @@ func init() {
 		EventsWatched,
 		EventsPublished,
 		SenderEvents,
-		SenderPushDuration,
+		SenderRequests,
+		SenderRequestDuration,
 		HookDuration,
 		HookErrors,
+		KubernetesRequests,
+		KubernetesRequestRetries,
+		KubernetesRequestDuration,
 	)
 }

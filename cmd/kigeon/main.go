@@ -80,25 +80,26 @@ func run() error {
 	logger.Info("starting kigeon", slog.String("config", configPath))
 
 	// create Kubernetes client
+	metrics.RegisterKubernetesMetrics()
 	k8sClient, err := createK8sClient(kubeconfig)
 	if err != nil {
 		return fmt.Errorf("failed to create Kubernetes client: %w", err)
 	}
 	logger.Info("kubernetes client created")
 
+	// setup context for graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// The metrics server is started first, so the liveness check succeeds
 	// during the startup.
-	metricsServer, err := metrics.NewServer(cfg.Global.MetricsBindAddress, metrics.Registry,
+	metricsServer, err := metrics.NewServer(ctx, cfg.Global.MetricsBindAddress, metrics.Registry,
 		logger.With(slog.String("component", "metrics")))
 	if err != nil {
 		return fmt.Errorf("failed to start metrics server: %w", err)
 	}
 	go metricsServer.Serve()
 	logger.Info("metrics server started", slog.String("address", metricsServer.Addr()))
-
-	// setup context for graceful shutdown
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	// handle shutdown signals
 	sigChan := make(chan os.Signal, 1)

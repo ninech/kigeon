@@ -335,9 +335,13 @@ subscribed and events are watched) on `global.metricsBindAddress`.
 | `kigeon_queue_max_bytes` | | Maximum size of the queue, the oldest events are dropped once it is reached |
 | `kigeon_sender_pending_events` | `sender` | Events a sender did not process yet |
 | `kigeon_sender_events_total` | `sender`, `result` (`sent`, `filtered`, `skipped`, `rejected`, `failed`) | Results of processing events per sender. `failed` events are retried |
-| `kigeon_sender_push_duration_seconds` | `sender` | Duration of pushes to the receiver |
+| `kigeon_sender_http_requests_total` | `sender`, `code` | HTTP requests to the receiver. Requests without a response (e.g. connection errors) are only counted as `failed` events |
+| `kigeon_sender_http_request_duration_seconds` | `sender`, `code` | Duration of HTTP requests to the receiver |
 | `kigeon_hook_duration_seconds` | `sender` | Duration of hook executions, including the pod enrichment |
 | `kigeon_hook_errors_total` | `sender` | Failed hook executions |
+| `kigeon_kubernetes_requests_total` | `code`, `method` | Requests to the Kubernetes API |
+| `kigeon_kubernetes_request_retries_total` | `code`, `method` | Retried requests to the Kubernetes API |
+| `kigeon_kubernetes_request_duration_seconds` | `verb` | Duration of non-watch requests to the Kubernetes API |
 
 Example alerts:
 
@@ -352,6 +356,10 @@ Example alerts:
   for: 15m
 - alert: KigeonSenderFailing
   expr: sum by (sender) (rate(kigeon_sender_events_total{result="failed"}[10m])) > 0
+  for: 15m
+# e.g. missing RBAC permissions
+- alert: KigeonKubernetesRequestErrors
+  expr: sum by (code) (rate(kigeon_kubernetes_requests_total{code=~"4..|5.."}[10m])) > 0
   for: 15m
 # no events received from the Kubernetes API
 - alert: KigeonNoEventsWatched

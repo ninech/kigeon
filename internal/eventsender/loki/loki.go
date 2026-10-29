@@ -72,17 +72,24 @@ func NewSender(name string, config Config, eventFetcher eventsender.EventFetcher
 		logger = slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	}
 
-	httpClient := options.HTTPClient
-	if httpClient == nil {
+	var httpClient http.Client
+	if options.HTTPClient != nil {
+		httpClient = *options.HTTPClient
+	} else {
 		transport := http.DefaultTransport.(*http.Transport).Clone()
 		if config.TLS != nil && config.TLS.InsecureSkipVerify {
 			transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec
 		}
-		httpClient = &http.Client{
+		httpClient = http.Client{
 			Timeout:   defaultTimeout,
 			Transport: transport,
 		}
 	}
+	transport := httpClient.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	httpClient.Transport = metrics.InstrumentRoundTripper(name, transport)
 
 	var hook *hookExecutor
 	if config.Hook != nil {
@@ -97,7 +104,7 @@ func NewSender(name string, config Config, eventFetcher eventsender.EventFetcher
 		name:         name,
 		config:       config,
 		eventFetcher: eventFetcher,
-		httpClient:   httpClient,
+		httpClient:   &httpClient,
 		logger:       logger,
 		hook:         hook,
 		noop:         options.Noop,
@@ -283,10 +290,6 @@ func (s *Sender) sendToLoki(ctx context.Context, event *corev1.Event, cfg Config
 		req.SetBasicAuth(cfg.BasicAuth.Username, cfg.BasicAuth.Password)
 	}
 
-	start := time.Now()
-	defer func() {
-		metrics.SenderPushDuration.WithLabelValues(s.name).Observe(time.Since(start).Seconds())
-	}()
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)

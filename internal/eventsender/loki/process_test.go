@@ -262,16 +262,16 @@ func TestSender_processEvent_metrics(t *testing.T) {
 		onError    string
 		wantResult string
 		wantError  bool
-		wantPush   bool
+		wantCode   string
 		hookError  bool
 	}{
-		"sent":                {status: http.StatusNoContent, wantResult: metrics.ResultSent, wantPush: true},
-		"rejected":            {status: http.StatusBadRequest, wantResult: metrics.ResultRejected, wantPush: true},
-		"failed":              {status: http.StatusInternalServerError, wantResult: metrics.ResultFailed, wantError: true, wantPush: true},
+		"sent":                {status: http.StatusNoContent, wantResult: metrics.ResultSent, wantCode: "204"},
+		"rejected":            {status: http.StatusBadRequest, wantResult: metrics.ResultRejected, wantCode: "400"},
+		"failed":              {status: http.StatusInternalServerError, wantResult: metrics.ResultFailed, wantError: true, wantCode: "500"},
 		"skipped by hook":     {status: http.StatusNoContent, script: skip, wantResult: metrics.ResultSkipped},
 		"failed hook skipped": {status: http.StatusNoContent, script: failing, onError: "skip", wantResult: metrics.ResultSkipped, hookError: true},
 		"failed hook retried": {status: http.StatusNoContent, script: failing, onError: "fail", wantResult: metrics.ResultFailed, wantError: true, hookError: true},
-		"failed hook default": {status: http.StatusNoContent, script: failing, onError: "use-default", wantResult: metrics.ResultSent, wantPush: true, hookError: true},
+		"failed hook default": {status: http.StatusNoContent, script: failing, onError: "use-default", wantResult: metrics.ResultSent, wantCode: "204", hookError: true},
 	}
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -300,11 +300,14 @@ func TestSender_processEvent_metrics(t *testing.T) {
 			}
 			assert.Equal(t, wantHookErrors, testutil.ToFloat64(metrics.HookErrors.WithLabelValues(senderName)))
 
-			wantPushes := uint64(0)
-			if tc.wantPush {
-				wantPushes = 1
+			for _, code := range []string{"204", "400", "500"} {
+				wantRequests := uint64(0)
+				if code == tc.wantCode {
+					wantRequests = 1
+				}
+				assert.Equal(t, float64(wantRequests), testutil.ToFloat64(metrics.SenderRequests.WithLabelValues(senderName, code)), "requests with code %s", code)
+				assert.Equal(t, wantRequests, observations(t, metrics.SenderRequestDuration, senderName, code), "request durations with code %s", code)
 			}
-			assert.Equal(t, wantPushes, observations(t, metrics.SenderPushDuration, senderName))
 			wantHooks := uint64(0)
 			if tc.script != "" {
 				wantHooks = 1

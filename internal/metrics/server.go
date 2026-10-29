@@ -23,9 +23,9 @@ type Server struct {
 	logger   *slog.Logger
 }
 
-// NewServer listens on the given address. The server needs to be started
-// with [Server.Serve].
-func NewServer(addr string, gatherer prometheus.Gatherer, logger *slog.Logger) (*Server, error) {
+// NewServer listens on the given address. Requests use ctx as their base
+// context. The server needs to be started with [Server.Serve].
+func NewServer(ctx context.Context, addr string, gatherer prometheus.Gatherer, logger *slog.Logger) (*Server, error) {
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to listen on %s: %w", addr, err)
@@ -33,7 +33,9 @@ func NewServer(addr string, gatherer prometheus.Gatherer, logger *slog.Logger) (
 
 	s := &Server{listener: listener, logger: logger}
 	mux := http.NewServeMux()
-	mux.Handle("/metrics", promhttp.HandlerFor(gatherer, promhttp.HandlerOpts{}))
+	mux.Handle("/metrics", promhttp.HandlerFor(gatherer, promhttp.HandlerOpts{
+		ErrorLog: slog.NewLogLogger(logger.Handler(), slog.LevelError),
+	}))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
@@ -44,7 +46,12 @@ func NewServer(addr string, gatherer prometheus.Gatherer, logger *slog.Logger) (
 		}
 		w.WriteHeader(http.StatusOK)
 	})
-	s.server = &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	s.server = &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+		BaseContext:       func(net.Listener) context.Context { return ctx },
+		ErrorLog:          slog.NewLogLogger(logger.Handler(), slog.LevelError),
+	}
 	return s, nil
 }
 

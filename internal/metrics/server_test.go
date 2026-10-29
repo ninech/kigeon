@@ -14,7 +14,7 @@ import (
 
 func TestServer(t *testing.T) {
 	t.Parallel()
-	server, err := metrics.NewServer("127.0.0.1:0", metrics.Registry, slog.New(slog.DiscardHandler))
+	server, err := metrics.NewServer(t.Context(), "127.0.0.1:0", metrics.Registry, slog.New(slog.DiscardHandler))
 	require.NoError(t, err)
 	go server.Serve()
 	t.Cleanup(func() { _ = server.Shutdown(t.Context()) })
