@@ -1,7 +1,9 @@
 package loki
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"log/slog"
 	"math/big"
 	"os"
@@ -225,18 +227,25 @@ def transform(config, event):
 		assert.Equal(t, "critical", result.StreamLabels["severity"])
 	})
 
-	t.Run("hook can print for debugging", func(t *testing.T) {
+	t.Run("hook prints are logged at info level", func(t *testing.T) {
 		t.Parallel()
 		path := writeStarScript(t, `
 def transform(config, event):
     print("processing event:", event["metadata"]["name"])
     return config
 `)
-		h, err := newHookExecutor(ConfigHook{Script: path}, testLogger(), nil)
+		var logs bytes.Buffer
+		logger := slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelInfo}))
+		h, err := newHookExecutor(ConfigHook{Script: path}, logger, nil)
 		require.NoError(t, err)
 
 		_, err = h.execute(context.Background(), baseConfig, event)
 		require.NoError(t, err)
+
+		var entry map[string]any
+		require.NoError(t, json.Unmarshal(logs.Bytes(), &entry))
+		assert.Equal(t, "INFO", entry["level"])
+		assert.Equal(t, "processing event: "+event.Name, entry["message"])
 	})
 
 	t.Run("hook can read pod labels when enrichPodLabels is enabled", func(t *testing.T) {

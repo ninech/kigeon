@@ -104,7 +104,7 @@ func (h *hookExecutor) execute(ctx context.Context, cfg Config, event *corev1.Ev
 	thread := &starlark.Thread{
 		Name: "kigeon-hook",
 		Print: func(_ *starlark.Thread, msg string) {
-			h.logger.Debug("starlark hook print", slog.String("message", msg))
+			h.logger.Info("starlark hook print", slog.String("message", msg))
 		},
 	}
 
