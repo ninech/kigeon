@@ -19,6 +19,7 @@ import (
 
 	"github.com/ninech/kigeon/internal/eventqueue"
 	"github.com/ninech/kigeon/internal/eventsender"
+	"github.com/ninech/kigeon/internal/metrics"
 )
 
 const (
@@ -71,17 +72,24 @@ func NewSender(name string, config Config, eventFetcher eventsender.EventFetcher
 		logger = slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	}
 
-	httpClient := options.HTTPClient
-	if httpClient == nil {
+	var httpClient http.Client
+	if options.HTTPClient != nil {
+		httpClient = *options.HTTPClient
+	} else {
 		transport := http.DefaultTransport.(*http.Transport).Clone()
 		if config.TLS != nil && config.TLS.InsecureSkipVerify {
 			transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec
 		}
-		httpClient = &http.Client{
+		httpClient = http.Client{
 			Timeout:   defaultTimeout,
 			Transport: transport,
 		}
 	}
+	transport := httpClient.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
+	}
+	httpClient.Transport = metrics.InstrumentRoundTripper(name, transport)
 
 	var hook *hookExecutor
 	if config.Hook != nil {
@@ -96,7 +104,7 @@ func NewSender(name string, config Config, eventFetcher eventsender.EventFetcher
 		name:         name,
 		config:       config,
 		eventFetcher: eventFetcher,
-		httpClient:   httpClient,
+		httpClient:   &httpClient,
 		logger:       logger,
 		hook:         hook,
 		noop:         options.Noop,
@@ -158,16 +166,20 @@ func (s *Sender) processEvent(ctx context.Context) error {
 
 	effectiveConfig := s.defaultConfig(event)
 	if s.hook != nil {
+		start := time.Now()
 		hooked, err := s.hook.execute(ctx, effectiveConfig, event)
+		metrics.HookDuration.WithLabelValues(s.name).Observe(time.Since(start).Seconds())
 		if errors.Is(err, errSkip) {
 			s.logger.Debug("hook skipped event",
 				slog.String("name", s.name),
 				slog.String("namespace", event.Namespace),
 				slog.String("reason", event.Reason),
 			)
+			s.countResult(metrics.ResultSkipped)
 			return ack.Ack()
 		}
 		if err != nil {
+			metrics.HookErrors.WithLabelValues(s.name).Inc()
 			return s.handleHookError(ctx, err, event, ack)
 		}
 		effectiveConfig = hooked
@@ -193,6 +205,7 @@ func (s *Sender) deliver(ctx context.Context, event *corev1.Event, cfg Config, a
 			s.logger.Warn("noop: failed to marshal event", slog.String("error", err.Error()))
 		}
 		s.logger.Info("noop: would send event to loki", slog.String("event", string(eventJSON)))
+		s.countResult(metrics.ResultSent)
 		return ack.Ack()
 	}
 
@@ -205,7 +218,9 @@ func (s *Sender) deliver(ctx context.Context, event *corev1.Event, cfg Config, a
 			slog.String("reason", event.Reason),
 			slog.String("error", err.Error()),
 		)
+		s.countResult(metrics.ResultRejected)
 	case err != nil:
+		s.countResult(metrics.ResultFailed)
 		return fmt.Errorf("failed to send event to loki: %w", err)
 	default:
 		s.logger.Debug("event sent to loki",
@@ -213,6 +228,7 @@ func (s *Sender) deliver(ctx context.Context, event *corev1.Event, cfg Config, a
 			slog.String("name", event.Name),
 			slog.String("reason", event.Reason),
 		)
+		s.countResult(metrics.ResultSent)
 	}
 
 	if err := ack.Ack(); err != nil {
@@ -234,11 +250,13 @@ func (s *Sender) handleHookError(ctx context.Context, hookErr error, event *core
 			slog.String("name", s.name),
 			slog.String("error", hookErr.Error()),
 		)
+		s.countResult(metrics.ResultSkipped)
 		if err := ack.Ack(); err != nil {
 			return fmt.Errorf("failed to acknowledge skipped event: %w", err)
 		}
 		return nil
 	case "fail":
+		s.countResult(metrics.ResultFailed)
 		return fmt.Errorf("config hook failed: %w", hookErr)
 	default: // "use-default"
 		s.logger.Warn("config hook failed, using default config",
@@ -292,6 +310,11 @@ func (s *Sender) sendToLoki(ctx context.Context, event *corev1.Event, cfg Config
 	}
 
 	return nil
+}
+
+// countResult counts the result of processing an event.
+func (s *Sender) countResult(result string) {
+	metrics.SenderEvents.WithLabelValues(s.name, result).Inc()
 }
 
 // lokiPushPayload represents the Loki push API payload structure.

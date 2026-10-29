@@ -9,11 +9,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
+	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/ninech/kigeon/internal/eventqueue"
+	"github.com/ninech/kigeon/internal/metrics"
 )
 
 // stubFetcher returns the given events once and blocks afterwards until the
@@ -243,4 +247,80 @@ func TestSender_Run_returnsNilWhenStopped(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSender_processEvent_metrics(t *testing.T) {
+	t.Parallel()
+
+	const (
+		skip    = "def transform(config, event):\n    return None\n"
+		failing = "def transform(config, event):\n    fail(\"boom\")\n"
+	)
+	tests := map[string]struct {
+		status     int
+		script     string
+		onError    string
+		wantResult string
+		wantError  bool
+		wantCode   string
+		hookError  bool
+	}{
+		"sent":                {status: http.StatusNoContent, wantResult: metrics.ResultSent, wantCode: "204"},
+		"rejected":            {status: http.StatusBadRequest, wantResult: metrics.ResultRejected, wantCode: "400"},
+		"failed":              {status: http.StatusInternalServerError, wantResult: metrics.ResultFailed, wantError: true, wantCode: "500"},
+		"skipped by hook":     {status: http.StatusNoContent, script: skip, wantResult: metrics.ResultSkipped},
+		"failed hook skipped": {status: http.StatusNoContent, script: failing, onError: "skip", wantResult: metrics.ResultSkipped, hookError: true},
+		"failed hook retried": {status: http.StatusNoContent, script: failing, onError: "fail", wantResult: metrics.ResultFailed, wantError: true, hookError: true},
+		"failed hook default": {status: http.StatusNoContent, script: failing, onError: "use-default", wantResult: metrics.ResultSent, wantCode: "204", hookError: true},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			senderName := "metrics-" + name
+			server, _ := newLokiServer(t, tc.status)
+			cfg := Config{URL: server.URL}
+			if tc.script != "" {
+				cfg.Hook = &ConfigHook{Script: writeStarScript(t, tc.script), OnError: tc.onError}
+			}
+			fetcher := &stubFetcher{events: []*corev1.Event{createTestEvent()}}
+			sender, err := NewSender(senderName, cfg, fetcher, SenderOptions{Logger: testLogger()})
+			require.NoError(t, err)
+
+			err = sender.processEvent(t.Context())
+			if tc.wantError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+
+			assert.Equal(t, float64(1), testutil.ToFloat64(metrics.SenderEvents.WithLabelValues(senderName, tc.wantResult)))
+			wantHookErrors := float64(0)
+			if tc.hookError {
+				wantHookErrors = 1
+			}
+			assert.Equal(t, wantHookErrors, testutil.ToFloat64(metrics.HookErrors.WithLabelValues(senderName)))
+
+			for _, code := range []string{"204", "400", "500"} {
+				wantRequests := uint64(0)
+				if code == tc.wantCode {
+					wantRequests = 1
+				}
+				assert.Equal(t, float64(wantRequests), testutil.ToFloat64(metrics.SenderRequests.WithLabelValues(senderName, code)), "requests with code %s", code)
+				assert.Equal(t, wantRequests, observations(t, metrics.SenderRequestDuration, senderName, code), "request durations with code %s", code)
+			}
+			wantHooks := uint64(0)
+			if tc.script != "" {
+				wantHooks = 1
+			}
+			assert.Equal(t, wantHooks, observations(t, metrics.HookDuration, senderName))
+		})
+	}
+}
+
+// observations returns the number of observations of a histogram.
+func observations(t *testing.T, histogram *prometheus.HistogramVec, labels ...string) uint64 {
+	t.Helper()
+	m := &dto.Metric{}
+	require.NoError(t, histogram.WithLabelValues(labels...).(prometheus.Metric).Write(m))
+	return m.GetHistogram().GetSampleCount()
 }

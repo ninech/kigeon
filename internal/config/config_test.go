@@ -91,6 +91,7 @@ eventsenders:
 				assert.Equal(t, "/var/lib/kigeon/data", cfg.Global.DataDir)
 				assert.Equal(t, "info", cfg.Global.LogLevel)
 				assert.Equal(t, "json", cfg.Global.LogFormat)
+				assert.Equal(t, ":8080", cfg.Global.MetricsBindAddress)
 
 				assert.Equal(t, 24*time.Hour, cfg.Queue.EventsMaxAge.Duration)
 				assert.Equal(t, resource.MustParse("500Mi"), cfg.Queue.EventsMaxBytes)

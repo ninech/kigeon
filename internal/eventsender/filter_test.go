@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/ninech/kigeon/internal/eventqueue"
 	"github.com/ninech/kigeon/internal/eventsender"
+	"github.com/ninech/kigeon/internal/metrics"
 )
 
 // fakeFetcher returns the queued events in order and records acknowledgements.
@@ -89,8 +91,9 @@ func TestFilteredFetcher(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+			sender := "filter-" + name
 			fetcher := &fakeFetcher{events: tc.events}
-			filtered := eventsender.FilteredFetcher(fetcher, namespaceFilter{
+			filtered := eventsender.FilteredFetcher(sender, fetcher, namespaceFilter{
 				namespaces:           map[string]bool{"project": true},
 				includeNonNamespaced: tc.includeNonNamespaced,
 			}, nil)
@@ -100,6 +103,7 @@ func TestFilteredFetcher(t *testing.T) {
 			require.NotNil(t, ack)
 			assert.Equal(t, tc.wantEvent, event.Name)
 			assert.Equal(t, tc.wantAcked, fetcher.acked)
+			assert.Equal(t, float64(len(tc.wantAcked)), testutil.ToFloat64(metrics.SenderEvents.WithLabelValues(sender, metrics.ResultFiltered)))
 		})
 	}
 }
@@ -110,7 +114,7 @@ func TestFilteredFetcher_Errors(t *testing.T) {
 
 	t.Run("fetch errors are returned", func(t *testing.T) {
 		t.Parallel()
-		filtered := eventsender.FilteredFetcher(&fakeFetcher{}, filter, nil)
+		filtered := eventsender.FilteredFetcher("test", &fakeFetcher{}, filter, nil)
 		_, _, err := filtered.Fetch(t.Context())
 		require.ErrorIs(t, err, eventqueue.ErrNoMessage)
 	})
@@ -118,7 +122,7 @@ func TestFilteredFetcher_Errors(t *testing.T) {
 	t.Run("only rejected events return no message", func(t *testing.T) {
 		t.Parallel()
 		fetcher := &fakeFetcher{events: []*corev1.Event{newEvent("rejected", "kube-system")}}
-		filtered := eventsender.FilteredFetcher(fetcher, filter, nil)
+		filtered := eventsender.FilteredFetcher("test", fetcher, filter, nil)
 		_, _, err := filtered.Fetch(t.Context())
 		require.ErrorIs(t, err, eventqueue.ErrNoMessage)
 		assert.Equal(t, []string{"rejected"}, fetcher.acked)
@@ -128,7 +132,7 @@ func TestFilteredFetcher_Errors(t *testing.T) {
 		t.Parallel()
 		ackErr := errors.New("ack failed")
 		fetcher := &fakeFetcher{events: []*corev1.Event{newEvent("rejected", "kube-system")}, ackErr: ackErr}
-		filtered := eventsender.FilteredFetcher(fetcher, filter, nil)
+		filtered := eventsender.FilteredFetcher("test", fetcher, filter, nil)
 		_, _, err := filtered.Fetch(t.Context())
 		require.ErrorIs(t, err, ackErr)
 	})
