@@ -15,6 +15,8 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/utils/ptr"
+
+	"github.com/ninech/kigeon/internal/metrics"
 )
 
 // EventQueue is the interface the EventPusher uses to publish events to.
@@ -103,6 +105,7 @@ func (ep *EventPusher) registerEventHandler() {
 	if _, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			if event, ok := obj.(*v1.Event); ok {
+				metrics.EventsWatched.WithLabelValues(metrics.SourceKubernetes).Inc()
 				ep.enqueue(event)
 			}
 		},
@@ -114,6 +117,7 @@ func (ep *EventPusher) registerEventHandler() {
 			// resource version has changed. Most probably this was
 			// a `count` change.
 			if oldEvent.ResourceVersion != newEvent.ResourceVersion {
+				metrics.EventsWatched.WithLabelValues(metrics.SourceKubernetes).Inc()
 				ep.enqueue(newEvent)
 			}
 		},
@@ -141,6 +145,7 @@ func (ep *EventPusher) enqueue(event *v1.Event) {
 // Push queues an event which was not observed by the event informer, like a
 // synthetic event. It must not be called after Stop.
 func (ep *EventPusher) Push(event *v1.Event) {
+	metrics.EventsWatched.WithLabelValues(metrics.SourceSynthetic).Inc()
 	ep.enqueue(event)
 }
 

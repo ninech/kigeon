@@ -9,6 +9,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"github.com/ninech/kigeon/internal/eventqueue"
+	"github.com/ninech/kigeon/internal/metrics"
 )
 
 // EventFetcher fetches events from the event queue.
@@ -21,16 +22,18 @@ type ObjectFilter interface {
 	IsAllowedForObject(obj corev1.ObjectReference) bool
 }
 
-// FilteredFetcher returns an EventFetcher which acknowledges and skips events
-// whose involved object is rejected by the filter.
-func FilteredFetcher(fetcher EventFetcher, filter ObjectFilter, logger *slog.Logger) EventFetcher {
+// FilteredFetcher returns an EventFetcher of the given sender which
+// acknowledges and skips events whose involved object is rejected by the
+// filter.
+func FilteredFetcher(sender string, fetcher EventFetcher, filter ObjectFilter, logger *slog.Logger) EventFetcher {
 	if logger == nil {
 		logger = slog.New(slog.NewJSONHandler(io.Discard, nil))
 	}
-	return &filteredFetcher{fetcher: fetcher, filter: filter, logger: logger}
+	return &filteredFetcher{sender: sender, fetcher: fetcher, filter: filter, logger: logger}
 }
 
 type filteredFetcher struct {
+	sender  string
 	fetcher EventFetcher
 	filter  ObjectFilter
 	logger  *slog.Logger
@@ -54,5 +57,6 @@ func (f *filteredFetcher) Fetch(ctx context.Context) (*corev1.Event, eventqueue.
 		if err := ack.Ack(); err != nil {
 			return nil, nil, fmt.Errorf("failed to acknowledge filtered event: %w", err)
 		}
+		metrics.SenderEvents.WithLabelValues(f.sender, metrics.ResultFiltered).Inc()
 	}
 }

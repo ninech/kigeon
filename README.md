@@ -84,6 +84,9 @@ global:
   # Log format: json, text. Default: json
   logFormat: json
 
+  # Address of the metrics and health endpoints. Default: :8080
+  metricsBindAddress: ":8080"
+
 queue:
   # How long undelivered events are kept in the queue. Default: 24h
   eventsMaxAge: 24h
@@ -316,6 +319,44 @@ kigeon --config /etc/kigeon/config.yaml --kubeconfig ~/.kube/config
 
 # Override log level
 kigeon --config /etc/kigeon/config.yaml --log-level debug
+```
+
+## Metrics
+
+kigeon serves Prometheus metrics on `/metrics`, a liveness check on
+`/healthz` and a readiness check on `/readyz` (ready once all senders are
+subscribed and events are watched) on `global.metricsBindAddress`.
+
+| Metric | Labels | Description |
+|--------|--------|-------------|
+| `kigeon_events_watched_total` | `source` (`kubernetes`, `synthetic`) | Events received from Kubernetes or created by kigeon (e.g. OOM killed events) |
+| `kigeon_events_published_total` | `result` (`published`, `duplicate`, `error`) | Results of publishing events to the queue |
+| `kigeon_queue_bytes` / `kigeon_queue_messages` | | Size and number of events in the queue |
+| `kigeon_queue_max_bytes` | | Maximum size of the queue, the oldest events are dropped once it is reached |
+| `kigeon_sender_pending_events` | `sender` | Events a sender did not process yet |
+| `kigeon_sender_events_total` | `sender`, `result` (`sent`, `filtered`, `skipped`, `rejected`, `failed`) | Results of processing events per sender. `failed` events are retried |
+| `kigeon_sender_push_duration_seconds` | `sender` | Duration of pushes to the receiver |
+| `kigeon_hook_duration_seconds` | `sender` | Duration of hook executions, including the pod enrichment |
+| `kigeon_hook_errors_total` | `sender` | Failed hook executions |
+
+Example alerts:
+
+```yaml
+# a sender does not keep up or its receiver is unavailable
+- alert: KigeonSenderBacklog
+  expr: kigeon_sender_pending_events > 1000
+  for: 15m
+# the queue is about to drop events which were not sent yet
+- alert: KigeonQueueAlmostFull
+  expr: kigeon_queue_bytes / kigeon_queue_max_bytes > 0.8
+  for: 15m
+- alert: KigeonSenderFailing
+  expr: sum by (sender) (rate(kigeon_sender_events_total{result="failed"}[10m])) > 0
+  for: 15m
+# no events received from the Kubernetes API
+- alert: KigeonNoEventsWatched
+  expr: sum(rate(kigeon_events_watched_total{source="kubernetes"}[1h])) == 0
+  for: 1h
 ```
 
 ## How it works

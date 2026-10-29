@@ -17,6 +17,7 @@ import (
 	"github.com/ninech/kigeon/internal/eventqueue"
 	"github.com/ninech/kigeon/internal/eventsender"
 	"github.com/ninech/kigeon/internal/filter"
+	"github.com/ninech/kigeon/internal/metrics"
 	"github.com/ninech/kigeon/internal/pods"
 
 	// import sender packages to register them
@@ -30,15 +31,17 @@ import (
 )
 
 var (
-	configPath string
-	kubeconfig string
-	logLevel   string
+	configPath         string
+	kubeconfig         string
+	logLevel           string
+	metricsBindAddress string
 )
 
 func main() {
 	flag.StringVar(&configPath, "config", "", "Path to configuration file")
 	flag.StringVar(&kubeconfig, "kubeconfig", "", "Path to kubeconfig file (optional, uses in-cluster config if not provided)")
 	flag.StringVar(&logLevel, "log-level", "", "Log level (debug, info, warn, error) - overrides config")
+	flag.StringVar(&metricsBindAddress, "metrics-bind-address", "", "Address of the metrics and health endpoints - overrides config")
 	flag.Parse()
 
 	if configPath == "" {
@@ -63,6 +66,9 @@ func run() error {
 	if logLevel != "" {
 		cfg.Global.LogLevel = logLevel
 	}
+	if metricsBindAddress != "" {
+		cfg.Global.MetricsBindAddress = metricsBindAddress
+	}
 
 	// validate configuration
 	if err := cfg.Validate(); err != nil {
@@ -79,6 +85,16 @@ func run() error {
 		return fmt.Errorf("failed to create Kubernetes client: %w", err)
 	}
 	logger.Info("kubernetes client created")
+
+	// The metrics server is started first, so the liveness check succeeds
+	// during the startup.
+	metricsServer, err := metrics.NewServer(cfg.Global.MetricsBindAddress, metrics.Registry,
+		logger.With(slog.String("component", "metrics")))
+	if err != nil {
+		return fmt.Errorf("failed to start metrics server: %w", err)
+	}
+	go metricsServer.Serve()
+	logger.Info("metrics server started", slog.String("address", metricsServer.Addr()))
 
 	// setup context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -100,6 +116,9 @@ func run() error {
 		return fmt.Errorf("failed to start event queue: %w", err)
 	}
 	logger.Info("event queue started")
+	if err := metrics.Registry.Register(eq.Collector()); err != nil {
+		return fmt.Errorf("failed to register queue metrics: %w", err)
+	}
 
 	// The pod informer is only started if senders or OOM killed events
 	// require it.
@@ -161,7 +180,7 @@ func run() error {
 		}
 		var fetcher eventsender.EventFetcher = subscription
 		if nsFilter != nil {
-			fetcher = eventsender.FilteredFetcher(fetcher, nsFilter, senderLogger)
+			fetcher = eventsender.FilteredFetcher(senderCfg.Name, fetcher, nsFilter, senderLogger)
 		}
 
 		// Create sender using registry
@@ -237,6 +256,7 @@ func run() error {
 		logger.Info("watching for OOM killed containers")
 	}
 
+	metricsServer.SetReady()
 	logger.Info("kigeon started successfully", slog.Int("senders", len(senders)))
 
 	// Wait for shutdown signal
@@ -268,6 +288,12 @@ func run() error {
 	// Stop event queue
 	eq.Stop()
 	logger.Debug("event queue stopped")
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	if err := metricsServer.Shutdown(shutdownCtx); err != nil {
+		logger.Warn("failed to stop metrics server", slog.String("error", err.Error()))
+	}
+	shutdownCancel()
 
 	cancel()
 

@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -18,6 +20,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	"github.com/ninech/kigeon/internal/eventpusher"
+	"github.com/ninech/kigeon/internal/metrics"
 )
 
 const (
@@ -284,4 +287,29 @@ func TestEventPusher_Push(t *testing.T) {
 	events := mockQueue.getEvents()
 	is.Len(events, 1)
 	is.Equal("synthetic", events[0].Name)
+}
+
+// TestEventPusher_Metrics is not parallel, as the counters are shared by all
+// event pushers.
+func TestEventPusher_Metrics(t *testing.T) { //nolint:paralleltest
+	fakeClient := fake.NewSimpleClientset(newEvent("existing"))
+	mockQueue := &fakeEventQueue{}
+	mockQueue.publishWait.Add(2)
+
+	watched := func(source string) float64 {
+		return testutil.ToFloat64(metrics.EventsWatched.WithLabelValues(source))
+	}
+	kubernetes, synthetic := watched(metrics.SourceKubernetes), watched(metrics.SourceSynthetic)
+
+	pusher := eventpusher.NewEventPusher(t.Context(), mockQueue, fakeClient, eventpusher.Options{
+		ResyncInterval: ptr.To(time.Duration(0)),
+	})
+	go pusher.Run()
+	require.NoError(t, pusher.WaitForStart(5*time.Second))
+	pusher.Push(newEvent("synthetic"))
+	mockQueue.publishWait.Wait()
+	pusher.Stop()
+
+	assert.Equal(t, kubernetes+1, watched(metrics.SourceKubernetes))
+	assert.Equal(t, synthetic+1, watched(metrics.SourceSynthetic))
 }

@@ -29,6 +29,9 @@ type GlobalConfig struct {
 	LogLevel string `json:"logLevel"`
 	// LogFormat is the log format (json, text).
 	LogFormat string `json:"logFormat"`
+	// MetricsBindAddress is the address serving the metrics and health
+	// endpoints.
+	MetricsBindAddress string `json:"metricsBindAddress"`
 }
 
 // QueueConfig contains settings for the event queue.
@@ -120,6 +123,9 @@ func applyDefaults(config *Config) {
 	}
 	if config.Global.LogFormat == "" {
 		config.Global.LogFormat = "json"
+	}
+	if config.Global.MetricsBindAddress == "" {
+		config.Global.MetricsBindAddress = ":8080"
 	}
 
 	if config.Queue.EventsMaxAge.Duration == 0 {

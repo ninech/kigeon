@@ -18,6 +18,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/utils/ptr"
+
+	"github.com/ninech/kigeon/internal/metrics"
 )
 
 // defaultBackOff defines the waiting time for unacknowledged messages before
@@ -295,26 +297,32 @@ func (eq *EventQueue) PublishEvent(ctx context.Context, event *corev1.Event) err
 	_, err := eq.keyValue.Get(ctx, eventIdentifier)
 	if err == nil {
 		logger.Debug("skipping already published event")
+		metrics.EventsPublished.WithLabelValues(metrics.PublishDuplicate).Inc()
 		return nil
 	}
 	if err != jetstream.ErrKeyNotFound {
+		metrics.EventsPublished.WithLabelValues(metrics.PublishError).Inc()
 		return fmt.Errorf("failed to check KV store for event UID %s: %w", eventIdentifier, err)
 	}
 
 	data, err := json.Marshal(ev)
 	if err != nil {
+		metrics.EventsPublished.WithLabelValues(metrics.PublishError).Inc()
 		return fmt.Errorf("can not JSON marshal event %s: %w", eventIdentifier, err)
 	}
 
 	// publish the message using the K8s event UID as the Nats-Msg-Id for real-time deduplication.
 	ack, err := eq.jetStreamClient.Publish(ctx, subjectName, data, jetstream.WithMsgID(eventIdentifier))
 	if err != nil {
-		if ack != nil && ack.Duplicate {
-			logger.Info("duplicated event rejected")
-			return nil
-		}
+		metrics.EventsPublished.WithLabelValues(metrics.PublishError).Inc()
 		return fmt.Errorf("failed to publish message: %w", err)
 	}
+	if ack.Duplicate {
+		logger.Debug("duplicated event rejected")
+		metrics.EventsPublished.WithLabelValues(metrics.PublishDuplicate).Inc()
+		return nil
+	}
+	metrics.EventsPublished.WithLabelValues(metrics.PublishPublished).Inc()
 
 	// The event is persisted in the stream now. Failing to record it only
 	// weakens deduplication across restarts, so we do not return an error.
